@@ -1,7 +1,7 @@
-use std::{io, thread};
-use std::io::{BufRead, BufReader, Read, Write};
-use std::net::{Shutdown, TcpListener, TcpStream};
-use std::time::{Duration, SystemTime};
+use std::{thread};
+use std::io::{BufRead, BufReader, Write};
+use std::net::{TcpListener, TcpStream};
+use std::time::{Duration};
 
 fn server_connection(stream: &mut TcpStream) {
     println!("inside server_connection!");
