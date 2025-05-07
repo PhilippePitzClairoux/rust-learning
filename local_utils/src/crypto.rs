@@ -1,3 +1,5 @@
+use std::error::Error;
+use std::fmt;
 use sha2::Sha256;
 use rand::{TryRngCore};
 use aes_gcm::aead::{Aead};
@@ -5,46 +7,46 @@ use aes_gcm::{Aes256Gcm, KeyInit, Nonce};
 use aes_gcm::aead::generic_array::GenericArray;
 use hkdf::Hkdf;
 
-pub enum CryptoErrors {
-    CannotDeriveKey,
-    CannotFormCipher,
-    CannotEncryptChunk,
-    CannotDecryptChunk,
+#[derive(Debug)]
+pub enum CryptoError {
+    DeriveKeyError(Box<dyn Error + Send + Sync>),
+    CreateCipherError(Box<dyn Error + Send + Sync>),
+    EncryptChunkError(Box<dyn Error + Send + Sync>),
+    DecryptChunkError(Box<dyn Error + Send + Sync>)
 }
 
-pub fn derive_key(password: &str, salt: &[u8]) -> Vec<u8> {
+pub fn derive_key(password: &str, salt: &[u8]) -> Result<Vec<u8>, CryptoError> {
     let info = generate_random_vector(0).as_slice().to_owned();
     let mut output = vec![0u8; 32];
     let hk = Hkdf::<Sha256>::new(Some(&salt), &password.as_bytes());
-    hk.expand(info.as_slice(), &mut output)
-        .expect("cannot generate key");
 
-    output
-}
-
-pub fn encrypt_chunk(input: &[u8], passphrase: &str, salt: &[u8], nonce: &[u8]) -> Vec<u8> {
-    let derived_key = derive_key(passphrase, salt);
-    let cipher = Aes256Gcm::new_from_slice(derived_key.as_slice())
-        .expect("cannot create Aes256Gcm");
-
-    match cipher.encrypt(&Nonce::from_slice(nonce), input.as_ref()) {
-        Ok(encrypted) => encrypted,
-        Err(e) => {
-            panic!("could not encrypt data: {:?}", e);
-        }
+    match hk.expand(info.as_slice(), &mut output) {
+        Ok(_) => Ok(output),
+        Err(e) => Err(CryptoError::DeriveKeyError(e.into()))
     }
 }
 
-pub fn decrypt_chunk(input: &[u8], passphrase: &str, salt: &[u8], nonce: &[u8]) -> Vec<u8> {
+pub fn encrypt_chunk(input: &[u8], passphrase: &str, salt: &[u8], nonce: &[u8]) -> Result<Vec<u8>, CryptoError> {
+    let derived_key = derive_key(passphrase, salt)?;
+    match Aes256Gcm::new_from_slice(derived_key.as_slice()) {
+        Ok(cipher) => {
+            match cipher.encrypt(&Nonce::from_slice(nonce), input.as_ref()) {
+                Ok(encrypted) => Ok(encrypted),
+                Err(e) => Err(CryptoError::EncryptChunkError(e.into()))
+            }
+        }
+        Err(e) => Err(CryptoError::CreateCipherError(e.into()))
+    }
+}
+
+pub fn decrypt_chunk(input: &[u8], passphrase: &str, salt: &[u8], nonce: &[u8]) -> Result<Vec<u8>, CryptoError> {
     let derived_key = derive_key(passphrase, salt);
     let key = GenericArray::from_slice(&derived_key);
 
     let cipher= Aes256Gcm::new(key);
     match cipher.decrypt(&Nonce::from_slice(nonce), input.as_ref()) {
-        Ok(encrypted) => encrypted,
-        Err(e) => {
-            panic!("could not encrypt data: {:?}", e);
-        }
+        Ok(encrypted) => Ok(encrypted),
+        Err(e) => Err(CryptoError::DecryptChunkError(e.into()))
     }
 }
 
@@ -84,23 +86,23 @@ mod test {
     #[test]
     fn test_derive_key() {
 
-        let initial = derive_key(PASSWORD.into(), SALT);
+        let initial = derive_key(PASSWORD.into(), SALT).unwrap();
 
         for _ in 0..100 {
-            assert_eq!(initial, derive_key(PASSWORD.into(), SALT));
+            assert_eq!(initial, derive_key(PASSWORD.into(), SALT).unwrap());
         }
         println!("Password and salt were derived 100 times and they always returned the same result!")
     }
 
     #[test]
     fn test_encryption() {
-        assert_eq!(EXPECTED_ENCRYPTED, encrypt_chunk(CHUNK.as_bytes(), PASSWORD, SALT, NONCE));
+        assert_eq!(EXPECTED_ENCRYPTED, encrypt_chunk(CHUNK.as_bytes(), PASSWORD, SALT, NONCE).unwrap());
         println!("Encrypted chunk with the same nonce, password and salt returned expected result!")
     }
 
     #[test]
     fn test_decryption() {
-        assert_eq!(CHUNK.as_bytes(), decrypt_chunk(EXPECTED_ENCRYPTED, PASSWORD, SALT, NONCE));
+        assert_eq!(CHUNK.as_bytes(), decrypt_chunk(EXPECTED_ENCRYPTED, PASSWORD, SALT, NONCE).unwrap());
         println!("Decryption successful!")
     }
 }

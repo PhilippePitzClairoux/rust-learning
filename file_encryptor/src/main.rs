@@ -30,8 +30,8 @@ fn main() {
     let password = String::from("test#!12345!!!");
     let input = Vec::from("wow this is cool!");
 
-    let encrypted = crypto::encrypt_chunk(&input, &password, &salt, &nonce);
-    let decrypted = crypto::decrypt_chunk(&encrypted, &password, &salt, &nonce);
+    let encrypted = crypto::encrypt_chunk(&input, &password, &salt, &nonce).unwrap();
+    let decrypted = crypto::decrypt_chunk(&encrypted, &password, &salt, &nonce).unwrap();
 
     println!("Input : {}", crypto::print_random_bytes(&input));
     println!("Encrypted : {}", crypto::print_random_bytes(&encrypted));
