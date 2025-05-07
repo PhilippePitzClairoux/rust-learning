@@ -1,7 +1,7 @@
 use std::{thread};
-use std::io::{BufRead, BufReader, Write};
 use std::net::{TcpListener, TcpStream};
 use std::time::{Duration};
+use local_utils::tcp;
 
 fn serve_connection(stream: &mut TcpStream) {
     println!("inside server_connection!");
@@ -9,29 +9,16 @@ fn serve_connection(stream: &mut TcpStream) {
     stream.set_write_timeout(Some(Duration::from_secs(2))).unwrap();
 
     loop {
-        let mut buffer = String::new();
-        let mut bff = BufReader::new(stream.try_clone().unwrap());
-
-        match bff.read_line(&mut buffer) {
-            Ok(size) => {
-                if size == 0 {
-                    println!("Client disconnected (read 0 bytes)!");
-                    return;
-                }
-
-                println!("Got a message ({:?} bytes) : {}", size, buffer.strip_suffix("\n").unwrap());
-                stream.write(buffer.as_bytes())
-                    .expect("could not write to socket");
+        match tcp::get_message(stream) {
+            Ok(msg) => {
+                println!("Got message: {:?}", msg);
+                tcp::send_message(stream, &msg);
             }
-
-            Err(error) => {
-                println!("Could not read from stream : {:?}", error);
-                println!("Leaving function...");
-                return;
+            Err(e) => {
+                println!("{}", e);
+                return
             }
         }
-
-
     }
 }
 
@@ -44,7 +31,6 @@ fn main() {
             Ok(mut s) => {
                 thread::spawn(move || serve_connection(&mut s));
             }
-
             Err(e) => {
                 panic!("could not serve connection : {:?}", e)
             }
