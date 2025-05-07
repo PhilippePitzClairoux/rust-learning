@@ -9,7 +9,7 @@ fn serve_connection(stream: &mut TcpStream) {
     stream.set_write_timeout(Some(Duration::from_secs(2))).unwrap();
 
     loop {
-        match tcp::get_message(stream) {
+        match tcp::read_message(stream) {
             Ok(msg) => {
                 println!("Got message: {:?}", msg);
                 tcp::send_message(stream, &msg);
@@ -25,7 +25,6 @@ fn serve_connection(stream: &mut TcpStream) {
 fn main() {
     let listener = TcpListener::bind("127.0.0.1:8080")
                                 .unwrap_or_else(|e| panic!("could not bind : {:?}", e));
-
     for stream in listener.incoming() {
         match stream {
             Ok(mut s) => {

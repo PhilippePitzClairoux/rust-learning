@@ -16,7 +16,7 @@ fn send_messages(sock: &mut TcpStream, name: &str) {
         let msg = format!("{} says {:?}\n", name, MESSAGES[i]).as_str().to_owned();
         tcp::send_message(sock, &msg);
 
-        let msg = tcp::get_message(sock);
+        let msg = tcp::read_message(sock);
         println!("Got : {:?}", msg)
     }
 }
