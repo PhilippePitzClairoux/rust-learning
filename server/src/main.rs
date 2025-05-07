@@ -3,7 +3,7 @@ use std::io::{BufRead, BufReader, Write};
 use std::net::{TcpListener, TcpStream};
 use std::time::{Duration};
 
-fn server_connection(stream: &mut TcpStream) {
+fn serve_connection(stream: &mut TcpStream) {
     println!("inside server_connection!");
     stream.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
     stream.set_write_timeout(Some(Duration::from_secs(2))).unwrap();
@@ -15,11 +15,11 @@ fn server_connection(stream: &mut TcpStream) {
         match bff.read_line(&mut buffer) {
             Ok(size) => {
                 if size == 0 {
-                    println!("Client disconnected (red 0 bytes)!");
+                    println!("Client disconnected (read 0 bytes)!");
                     return;
                 }
 
-                println!("Got a message ({:?} bytes) : {:?}", size, buffer);
+                println!("Got a message ({:?} bytes) : {}", size, buffer.strip_suffix("\n").unwrap());
                 stream.write(buffer.as_bytes())
                     .expect("could not write to socket");
             }
@@ -42,7 +42,7 @@ fn main() {
     for stream in listener.incoming() {
         match stream {
             Ok(mut s) => {
-                thread::spawn(move || server_connection(&mut s));
+                thread::spawn(move || serve_connection(&mut s));
             }
 
             Err(e) => {
