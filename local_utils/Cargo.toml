@@ -3,8 +3,18 @@ name = "local_utils"
 version = "0.1.0"
 edition = "2024"
 
+
 [dependencies]
-aes-gcm = "0.10.3"
-hkdf = "0.12.4"
+aes-gcm = { version = "0.10.3", features = ["std"] }
+hkdf = { version = "0.12.4", features = ["std"] }
 sha2 = "0.10.2"
 rand = "0.9.1"
+crypto-common = "0.1.6"
+
+[features]
+default = ["std"]
+std = []
+test_utils = []
+
+[dev-dependencies]
+local_utils = { path = ".", features = ["test_utils"] }

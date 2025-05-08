@@ -189,7 +189,9 @@ name = "local_utils"
 version = "0.1.0"
 dependencies = [
  "aes-gcm",
+ "crypto-common",
  "hkdf",
+ "local_utils",
  "rand",
  "sha2",
 ]

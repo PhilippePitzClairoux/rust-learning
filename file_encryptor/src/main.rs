@@ -3,8 +3,6 @@ use local_utils::crypto;
 
 const FILE_CHUNK_SIZE: usize = 1024 * 1024 * 5;
 
-
-
 fn open_file(path: String) -> File {
     match File::open(path) {
         Ok(file) => file,

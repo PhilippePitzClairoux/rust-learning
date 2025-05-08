@@ -1,68 +1,64 @@
-use std::error::Error;
-use std::fmt;
+use std::fmt::format;
 use sha2::Sha256;
 use rand::{TryRngCore};
 use aes_gcm::aead::{Aead};
 use aes_gcm::{Aes256Gcm, KeyInit, Nonce};
 use aes_gcm::aead::generic_array::GenericArray;
-use hkdf::Hkdf;
+use hkdf::{Hkdf};
+use crypto_common::InvalidLength;
 
 #[derive(Debug)]
-pub enum CryptoError {
-    DeriveKeyError(Box<dyn Error + Send + Sync>),
-    CreateCipherError(Box<dyn Error + Send + Sync>),
-    EncryptChunkError(Box<dyn Error + Send + Sync>),
-    DecryptChunkError(Box<dyn Error + Send + Sync>)
+pub enum Error {
+    DeriveKeyError(hkdf::InvalidLength),
+    AesGcmCipherError(InvalidLength),
+    EncryptChunkError(aes_gcm::Error),
+    DecryptChunkError(aes_gcm::Error)
 }
 
-pub fn derive_key(password: &str, salt: &[u8]) -> Result<Vec<u8>, CryptoError> {
+pub fn derive_key(password: &str, salt: &[u8]) -> Result<Vec<u8>, Error> {
     let info = generate_random_vector(0).as_slice().to_owned();
     let mut output = vec![0u8; 32];
     let hk = Hkdf::<Sha256>::new(Some(&salt), &password.as_bytes());
-
     match hk.expand(info.as_slice(), &mut output) {
         Ok(_) => Ok(output),
-        Err(e) => Err(CryptoError::DeriveKeyError(e.into()))
+        Err(error) => Err(Error::DeriveKeyError(error))
     }
 }
 
-pub fn encrypt_chunk(input: &[u8], passphrase: &str, salt: &[u8], nonce: &[u8]) -> Result<Vec<u8>, CryptoError> {
+pub fn encrypt_chunk(input: &[u8], passphrase: &str, salt: &[u8], nonce: &[u8]) -> Result<Vec<u8>, Error> {
     let derived_key = derive_key(passphrase, salt)?;
     match Aes256Gcm::new_from_slice(derived_key.as_slice()) {
         Ok(cipher) => {
-            match cipher.encrypt(&Nonce::from_slice(nonce), input.as_ref()) {
+            match cipher.encrypt(&Nonce::from_slice(nonce), input) {
                 Ok(encrypted) => Ok(encrypted),
-                Err(e) => Err(CryptoError::EncryptChunkError(e.into()))
+                Err(e) => Err(Error::EncryptChunkError(e))
             }
-        }
-        Err(e) => Err(CryptoError::CreateCipherError(e.into()))
+        },
+        Err(e) => Err(Error::AesGcmCipherError(e))
     }
+
 }
 
-pub fn decrypt_chunk(input: &[u8], passphrase: &str, salt: &[u8], nonce: &[u8]) -> Result<Vec<u8>, CryptoError> {
-    let derived_key = derive_key(passphrase, salt);
+pub fn decrypt_chunk(input: &[u8], passphrase: &str, salt: &[u8], nonce: &[u8]) -> Result<Vec<u8>, Error> {
+    let derived_key = derive_key(passphrase, salt)?;
     let key = GenericArray::from_slice(&derived_key);
 
     let cipher= Aes256Gcm::new(key);
     match cipher.decrypt(&Nonce::from_slice(nonce), input.as_ref()) {
-        Ok(encrypted) => Ok(encrypted),
-        Err(e) => Err(CryptoError::DecryptChunkError(e.into()))
+        Ok(decrypted) => Ok(decrypted),
+        Err(e) => Err(Error::DecryptChunkError(e.into()))
     }
 }
 
+#[cfg(feature = "test_utils")]
 pub fn print_random_bytes(bytes_vector: &Vec<u8>) -> String {
-    let mut output = vec![0u8];
+    let mut output = String::with_capacity(bytes_vector.len());
     for &b in bytes_vector {
-        if let Ok(_b) = std::str::from_utf8(&[b]) {
-            output.push(b);
-        } else {
-            output.extend(format!("\\x{:02x}", b).as_bytes());
-        }
+        output.push_str(format!("{}", b as char).as_str());
     }
 
-    String::from_utf8(output).unwrap()
+    output
 }
-
 pub fn generate_random_vector(size: usize) -> Vec<u8> {
     let mut array = vec![0u8; size];
     let mut rng = rand::rng();
@@ -76,6 +72,7 @@ pub fn generate_random_vector(size: usize) -> Vec<u8> {
 
 #[cfg(test)]
 mod test {
+
     use crate::crypto::{decrypt_chunk, derive_key, encrypt_chunk};
     const SALT: &[u8] = &[1,2,3,4,5,6,7,8,9,10,11,12];
     const PASSWORD: &str = "Very_Secure_Password!!!";
