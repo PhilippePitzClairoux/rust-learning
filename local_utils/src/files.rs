@@ -2,7 +2,8 @@ use std::error::Error;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Write};
 
-pub const FILE_CHUNK_SIZE: u64 = 1024 * 1024 * 5;
+// Default chunk size - 5 MB
+pub const FILE_CHUNK_SIZE: u64 = 1024 * 1024;
 
 type FileError = Box<dyn Error>;
 
