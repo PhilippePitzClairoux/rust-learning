@@ -1,0 +1,6 @@
+Key Changes:
+
+    input is now required: The input argument is required by default, because we did not use a default_value_t or
+     any required attribute. clap will automatically treat it as required if it doesn't have a default value.
+
+    The user will need to provide the input argument, otherwise, clap will automatically show an error message and the program will terminate.

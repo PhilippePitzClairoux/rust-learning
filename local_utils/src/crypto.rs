@@ -10,7 +10,7 @@ use crypto_common::InvalidLength;
 #[derive(Debug)]
 pub enum Error {
     DeriveKeyError(hkdf::InvalidLength),
-    AesGcmCipherError(InvalidLength),
+    CipherInitialisationError(InvalidLength),
     EncryptChunkError(aes_gcm::Error),
     DecryptChunkError(aes_gcm::Error)
 }
@@ -34,7 +34,7 @@ pub fn encrypt_chunk(input: &[u8], passphrase: &str, salt: &[u8], nonce: &[u8]) 
                 Err(e) => Err(Error::EncryptChunkError(e))
             }
         },
-        Err(e) => Err(Error::AesGcmCipherError(e))
+        Err(e) => Err(Error::CipherInitialisationError(e))
     }
 
 }
