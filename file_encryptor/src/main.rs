@@ -194,8 +194,9 @@ fn main() {
                 println!("Are you sure {} is encrypted ? Check again dummy...", &args.input);
                 exit(1);
             }
-            let mut capture_output: BufWriter<Cursor<Vec<u8>>> = BufWriter::new(Cursor::new(Vec::new()));
-            decrypt_file(&mut reader, &mut capture_output, &args.password, &cryptor_header)
+
+            // let mut capture_output: BufWriter<Cursor<Vec<u8>>> = BufWriter::new(Cursor::new(Vec::new()));
+            decrypt_file(&mut reader, &mut writer, &args.password, &cryptor_header)
                 .expect("could not decrypt file");
         }
         _ => {
