@@ -61,7 +61,7 @@ pub fn decrypt_chunk(input: &[u8], passphrase: &str, salt: &[u8], nonce: &[u8]) 
 }
 
 #[cfg(feature = "test_utils")]
-pub fn print_random_bytes(bytes_vector: &Vec<u8>) -> String {
+pub fn byte_vector_to_string(bytes_vector: &Vec<u8>) -> String {
     let mut output = String::with_capacity(bytes_vector.len());
     for &b in bytes_vector {
         output.push_str(format!("{}", b as char).as_str());

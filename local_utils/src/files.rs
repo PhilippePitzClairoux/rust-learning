@@ -21,7 +21,7 @@ pub fn create_file(path: &String) -> Result<File, FileError> {
     }
 }
 
-pub fn read_chunk(file: &mut BufReader<File>, size: usize) -> Result<Vec<u8>, FileError> {
+pub fn read_chunk<InputType: Sized + Read>(file: &mut BufReader<InputType>, size: usize) -> Result<Vec<u8>, FileError> {
     let mut buffer: Vec<u8> = vec![0u8; size];
     match file.read(buffer.as_mut_slice()) {
         Ok(s) => {
@@ -32,7 +32,7 @@ pub fn read_chunk(file: &mut BufReader<File>, size: usize) -> Result<Vec<u8>, Fi
     }
 }
 
-pub fn write_chunk(file: &mut BufWriter<File>, data: &[u8]) -> Result<(), FileError> {
+pub fn write_chunk<OutputType: Sized + Write>(file: &mut BufWriter<OutputType>, data: &[u8]) -> Result<(), FileError> {
     match file.write_all(data) {
         Ok(_) => Ok(()),
         Err(e) => Err(e.into())
