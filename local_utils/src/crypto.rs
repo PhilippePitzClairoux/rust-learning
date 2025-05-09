@@ -9,54 +9,48 @@ use aes_gcm::aead::generic_array::GenericArray;
 use hkdf::{Hkdf};
 use crypto_common::InvalidLength;
 
-#[derive(Debug)]
-pub enum CryptoError {
-    DeriveKeyError(hkdf::InvalidLength),
-    CipherInitialisationError(InvalidLength),
-    EncryptChunkError(aes_gcm::Error),
-    DecryptChunkError(aes_gcm::Error)
-}
 
-impl fmt::Display for CryptoError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "could not perform crypto task : {:?}", self)
-    }
-}
-
-#[cfg(feature = "std")]
-impl std::error::Error for CryptoError {}
-
-pub fn derive_key(password: &str, salt: &[u8]) -> Result<Vec<u8>, CryptoError> {
+pub fn derive_key(password: &str, salt: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
     let info = generate_random_vector(0).as_slice().to_owned();
     let mut output = vec![0u8; 32];
     let hk = Hkdf::<Sha256>::new(Some(&salt), &password.as_bytes());
     match hk.expand(info.as_slice(), &mut output) {
         Ok(_) => Ok(output),
-        Err(error) => Err(CryptoError::DeriveKeyError(error))
+        Err(e) => Err(e.into())
     }
 }
 
-pub fn encrypt_chunk(input: &[u8], passphrase: &str, salt: &[u8], nonce: &[u8]) -> Result<Vec<u8>, CryptoError> {
+pub fn encrypt_chunk(input: &[u8], passphrase: &str, salt: &[u8], nonce: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
     let derived_key = derive_key(passphrase, salt)?;
+    println!("derived key: {:?}", derived_key);
     match Aes256Gcm::new_from_slice(derived_key.as_slice()) {
         Ok(cipher) => {
             match cipher.encrypt(&Nonce::from_slice(nonce), input) {
                 Ok(encrypted) => Ok(encrypted),
-                Err(e) => Err(CryptoError::EncryptChunkError(e))
+                Err(e) => panic!("could not encrypt chunk: {}", e)
             }
         },
-        Err(e) => Err(CryptoError::CipherInitialisationError(e))
+        Err(e) => panic!("could not generate cipher: {}", e)
     }
 }
 
-pub fn decrypt_chunk(input: &[u8], passphrase: &str, salt: &[u8], nonce: &[u8]) -> Result<Vec<u8>, CryptoError> {
+pub fn decrypt_chunk(input: &[u8], passphrase: &str, salt: &[u8], nonce: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
     let derived_key = derive_key(passphrase, salt)?;
-    let key = GenericArray::from_slice(&derived_key);
-
-    let cipher= Aes256Gcm::new(key);
+    // match Aes256Gcm::new_from_slice(derived_key.as_slice()) {
+    //     Ok(cipher) => {
+    //         match cipher.decrypt(Nonce::from_slice(nonce), input) {
+    //             Ok(decrypted) => Ok(decrypted),
+    //             Err(e) => panic!("could not decrypt chunk: {}", e)
+    //         }
+    //     },
+    //     Err(e) => panic!("could not generate cipher: {}", e)
+    // }
+    println!("derived key: {:?}", derived_key);
+    let cipher= Aes256Gcm::new_from_slice(&derived_key)
+        .expect("could not generate cipher");
     match cipher.decrypt(&Nonce::from_slice(nonce), input.as_ref()) {
         Ok(decrypted) => Ok(decrypted),
-        Err(e) => Err(CryptoError::DecryptChunkError(e.into()))
+        Err(e) => panic!("could not decrypt chunk : {}", e)
     }
 }
 
@@ -81,35 +75,50 @@ pub fn generate_random_vector(size: usize) -> Vec<u8> {
 }
 
 #[cfg(test)]
-mod test {
+pub mod test {
 
     use crate::crypto::{decrypt_chunk, derive_key, encrypt_chunk};
-    const SALT: &[u8] = &[1,2,3,4,5,6,7,8,9,10,11,12];
-    const PASSWORD: &str = "Very_Secure_Password!!!";
-    const EXPECTED_ENCRYPTED: &[u8] = &[64, 250, 40, 219, 82, 175, 140, 7, 239, 112, 119, 36, 125, 10, 218, 84, 150, 154, 216, 64, 161, 147, 23];
-    const NONCE: &[u8] = &[12,11,10,9,8,7,6,5,4,3,2,1];
-    const CHUNK: &str = "yikes!!";
+    use crate::test_common as common;
 
     #[test]
     fn test_derive_key() {
 
-        let initial = derive_key(PASSWORD.into(), SALT).unwrap();
+        let initial = derive_key(
+            common::PASSWORD.into(), common::SALT
+        ).unwrap();
 
         for _ in 0..100 {
-            assert_eq!(initial, derive_key(PASSWORD.into(), SALT).unwrap());
+            let derived = derive_key(
+                common::PASSWORD.into(), common::SALT
+            ).unwrap();
+            assert_eq!(initial, derived);
         }
         println!("Password and salt were derived 100 times and they always returned the same result!")
     }
 
     #[test]
     fn test_encryption() {
-        assert_eq!(EXPECTED_ENCRYPTED, encrypt_chunk(CHUNK.as_bytes(), PASSWORD, SALT, NONCE).unwrap());
+        let encrypted = encrypt_chunk(
+            common::CHUNK.as_bytes(),
+            common::PASSWORD,
+            common::SALT,
+            common::NONCE
+        ).unwrap();
+
+        assert_eq!(common::EXPECTED_ENCRYPTED, encrypted.as_slice());
         println!("Encrypted chunk with the same nonce, password and salt returned expected result!")
     }
 
     #[test]
     fn test_decryption() {
-        assert_eq!(CHUNK.as_bytes(), decrypt_chunk(EXPECTED_ENCRYPTED, PASSWORD, SALT, NONCE).unwrap());
+        let decrypted = decrypt_chunk(
+            common::EXPECTED_ENCRYPTED,
+            common::PASSWORD,
+            common::SALT,
+            common::NONCE
+        ).unwrap();
+
+        assert_eq!(common::CHUNK.as_bytes(), decrypted.as_slice());
         println!("Decryption successful!")
     }
 }

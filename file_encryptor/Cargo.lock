@@ -231,8 +231,6 @@ dependencies = [
  "bincode",
  "clap",
  "local_utils",
- "serde",
- "serde_bytes",
 ]
 
 [[package]]
@@ -328,9 +326,12 @@ name = "local_utils"
 version = "0.1.0"
 dependencies = [
  "aes-gcm",
+ "bincode",
  "crypto-common",
  "hkdf",
  "rand",
+ "serde",
+ "serde_bytes",
  "sha2",
 ]
 
