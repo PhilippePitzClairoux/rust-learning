@@ -1,7 +1,5 @@
-use std::convert::{TryInto};
 use std::fs::{File, Metadata};
 use std::io::{BufReader, BufWriter};
-use bincode;
 use local_utils::{files, cryptor};
 use clap::{Parser, ValueEnum};
 use std::fs;
@@ -59,7 +57,7 @@ fn main() {
     let args = Args::parse();
 
     // input file (read from here)
-    let mut input_file = files::open_file(&args.input).expect("could not open input file");
+    let input_file = files::open_file(&args.input).expect("could not open input file");
 
     // create a reader to read from input file
     let mut reader = BufReader::new(input_file.try_clone().unwrap());
