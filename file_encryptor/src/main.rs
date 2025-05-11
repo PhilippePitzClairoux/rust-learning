@@ -38,7 +38,7 @@ struct Args {
     output: Option<String>,
 }
 
-fn encrypt_file(args: &Args, encrypted: &mut BufReader<File>, output_file_name: &String, mut writer: &mut BufWriter<File>) {
+fn encrypt_file(args: &Args, encrypted: &mut BufReader<File>, output_file_name: &String, writer: &mut BufWriter<File>) {
     let is_encrypted = cryptor::file_is_already_encrypted(&args.input)
         .expect("could not check if file was already encrypted");
 
@@ -47,12 +47,8 @@ fn encrypt_file(args: &Args, encrypted: &mut BufReader<File>, output_file_name: 
         exit(1);
     }
 
-    let metadata = fs::metadata(&args.input)
-        .expect("could not fetch input file metadata");
-
-    let mut ctx = cryptor::Context::from(
-        cryptor::HeaderChunk::with_file_length(metadata.len())
-    );
+    let ctx = cryptor::Context::from_file_path(&args.input)
+        .expect("could not read input file");
 
     println!("Encrypting {} ({})", args.input, output_file_name);
     ctx.encrypt_file(encrypted, writer, args.password.as_str())

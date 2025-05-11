@@ -1,4 +1,5 @@
 use std::error::Error;
+use std::fs;
 use std::io::{BufReader, BufWriter, Read, Write};
 use serde::{Serialize, Deserialize};
 use bincode::serde::{encode_into_std_write, decode_from_std_read};
@@ -144,7 +145,7 @@ impl Context {
         }
     }
 
-    pub fn from(header: HeaderChunk) -> Self {
+    pub fn from_header(header: HeaderChunk) -> Self {
         Self {
             salt: header.salt.clone(),
             chunks: header.chunks,
@@ -152,6 +153,15 @@ impl Context {
         }
     }
 
+    pub fn from_file_path(path: &str) -> Result<Self, Box<dyn Error>> {
+        let metadata = fs::metadata(path)?;
+        Ok(Self {
+            salt: crypto::generate_random_vector(SALT_SIZE),
+            config: bincode::config::standard(),
+            chunks: metadata.len() / FILE_CHUNK_SIZE,
+        })
+    }
+    
     pub fn from_encrypted_source<T: Read>(reader: &mut T) -> Result<Self, Box<dyn Error>> {
         let mut s = Self::new();
         s.load_header_from_reader(reader)?;
