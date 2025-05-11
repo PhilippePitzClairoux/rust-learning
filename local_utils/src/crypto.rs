@@ -4,7 +4,7 @@ use aes_gcm::aead::{Aead};
 use aes_gcm::{Aes256Gcm, KeyInit, Nonce};
 use hkdf::{Hkdf};
 
-use crate::errors::Crypto as CryptoError;
+use crate::errors::{Crypto as CryptoError};
 
 pub fn derive_key(password: &str, salt: &[u8]) -> Result<Vec<u8>, CryptoError> {
     let info = generate_random_vector(0).as_slice().to_owned();
@@ -12,21 +12,20 @@ pub fn derive_key(password: &str, salt: &[u8]) -> Result<Vec<u8>, CryptoError> {
     let hk = Hkdf::<Sha256>::new(Some(&salt), &password.as_bytes());
     match hk.expand(info.as_slice(), &mut output) {
         Ok(_) => Ok(output),
-        Err(e) => Err(e.into())
+        Err(e) => Err(CryptoError::KeyDeriveFailed)
     }
 }
 
 pub fn encrypt_chunk(input: &[u8], passphrase: &str, salt: &[u8], nonce: &[u8]) -> Result<Vec<u8>, CryptoError> {
     let derived_key = derive_key(passphrase, salt)?;
-    println!("derived key: {:?}", derived_key);
     match Aes256Gcm::new_from_slice(derived_key.as_slice()) {
         Ok(cipher) => {
             match cipher.encrypt(&Nonce::from_slice(nonce), input) {
                 Ok(encrypted) => Ok(encrypted),
-                Err(e) => panic!("could not encrypt chunk: {}", e)
+                Err(_) => Err(CryptoError::EncryptFailed)
             }
         },
-        Err(e) => panic!("could not generate cipher: {}", e)
+        Err(e) => Err(CryptoError::CipherInitializationFailed)
     }
 }
 
@@ -37,7 +36,7 @@ pub fn decrypt_chunk(input: &[u8], passphrase: &str, salt: &[u8], nonce: &[u8]) 
         .expect("could not generate cipher");
     match cipher.decrypt(&Nonce::from_slice(nonce), input.as_ref()) {
         Ok(decrypted) => Ok(decrypted),
-        Err(e) => panic!("could not decrypt chunk : {}", e)
+        Err(e) => Err(CryptoError::DecryptFailed)
     }
 }
 

@@ -4,14 +4,18 @@ use thiserror::Error as ThisError;
 
 #[derive(ThisError, Debug)]
 pub enum Crypto {
-    #[error("could not perform encryption task")]
-    EncryptionTaskFailed(#[from] AeadError),
 
-    #[error("key derivation error")]
-    KeyDerivationFailed(#[from] InvalidLength),
+    #[error("could not encrypt chunk")]
+    EncryptFailed,
 
-    #[error("file error")]
-    FileOpFailed(#[from] std::io::Error),
+    #[error("could not decrypt chunk")]
+    DecryptFailed,
+
+    #[error("could not initialize cipher")]
+    CipherInitializationFailed,
+
+    #[error("could not derive key")]
+    KeyDeriveFailed,
 }
 
 #[derive(ThisError, Debug)]
@@ -31,30 +35,42 @@ pub enum Cryptor {
     #[error("could not perform encryption task")]
     EncryptionFailed(Crypto),
 
-    #[error("could not manipulate file")]
-    FileReadFailed(#[from] std::io::Error),
-
     #[error("could not encode chunk")]
     EncodeChunkFailed(#[from] bincode::error::EncodeError),
 
     #[error("could not decode chunk")]
     DecodeChunkFailed(#[from] bincode::error::DecodeError),
 
-    #[error("could not read/write chunk")]
-    ReadWriteChunkError(#[from] File),
-
     #[error("could not perform crypto operation")]
     CryptoFailed(#[from] Crypto),
+
+    #[error("could not read chunk")]
+    ChunkReadFailed,
+
+    #[error("file error")]
+    FileError(File),
+
+    #[error("could not write chunk")]
+    ChunkWriteFailed,
+
+    #[error("file is not encrypted")]
+    FileNotEncrypted,
+
+    #[error("unexpected chunk type found")]
+    UnexpectedChunk,
+
+    #[error("could not fetch file metadata")]
+    FetchFileMetadataFailed,
 }
 
 #[derive(ThisError, Debug)]
 pub enum Tcp {
     #[error("tcp connection closed")]
     ConnectionClosed,
-    
+
     #[error("could not write tcp message")]
     SendMessageFailed,
-    
+
     #[error("could not read tcp message")]
     ReadMessageFailed,
 }

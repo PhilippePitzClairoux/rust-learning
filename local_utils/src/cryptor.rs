@@ -1,11 +1,10 @@
-use std::error::Error;
 use std::fs;
-use std::io::{BufReader, BufWriter, Read, Write};
-use serde::{Serialize, Deserialize};
+use std::io::{BufReader, Read, Write};
 use bincode::serde::{encode_into_std_write, decode_from_std_read};
 
 use crate::{crypto, files};
 use crate::errors::Cryptor as CryptorError;
+use crate::errors::File::FileOpenFailed;
 use crate::files::{read_chunk, FILE_CHUNK_SIZE};
 
 pub const SALT_SIZE: usize = 12;
@@ -43,8 +42,8 @@ impl HeaderChunk {
     }
     pub fn from(header: &[u8], salt: &[u8], chunks: u64) -> Self {
         Self {
-            header: header.clone().to_vec(),
-            salt: salt.clone().to_vec(),
+            header: header.to_vec(),
+            salt: salt.to_vec(),
             chunks
         }
     }
@@ -155,7 +154,9 @@ impl Context {
     }
 
     pub fn from_file_path(path: &str) -> Result<Self, CryptorError> {
-        let metadata = fs::metadata(path)?;
+        let metadata = fs::metadata(path)
+            .map_err(|_| CryptorError::FetchFileMetadataFailed)?;
+
         Ok(Self {
             salt: crypto::generate_random_vector(SALT_SIZE),
             config: bincode::config::standard(),
@@ -181,14 +182,13 @@ impl Context {
                 self.load_header(&header);
 
                 if header.header.ne(&ENCRYPTED_FILE_HEADER) {
-                    panic!("wrong header type")
+                    return Err(CryptorError::FileNotEncrypted)
                 }
-            },
-            // TODO : replace with custom error
-            _ => panic!("invalid chunk type found (requires header)")
-        }
 
-        Ok(())
+                Ok(())
+            },
+            _ => Err(CryptorError::UnexpectedChunk)
+        }
     }
 
     pub fn encrypt_file<R, W>(
@@ -208,7 +208,8 @@ impl Context {
         for _ in 0..self.chunks {
             // read a chunk
             let mut chunk = Chunk::from(
-                read_chunk(reader, FILE_CHUNK_SIZE as usize)?
+                read_chunk(reader, FILE_CHUNK_SIZE as usize)
+                    .map_err(|_| CryptorError::ChunkReadFailed)?
             );
 
             // decrypt chunk
@@ -244,8 +245,10 @@ impl Context {
                         chunk.decrypt(&password, &self.salt)?;
 
                         // output chunk
-                        writer.write_all(&chunk.data)?;
-                        writer.flush()?;
+                        writer.write_all(&chunk.data)
+                            .map_err(|_| CryptorError::ChunkWriteFailed)?;
+                        writer.flush()
+                            .map_err(|_| CryptorError::ChunkWriteFailed)?;
                     }
                     Ok(ChunkType::Header(_)) => panic!("invalid chunk type found (requires Data)"),
                     Err(e) => panic!("error loading chunk: {}", e)
@@ -258,11 +261,13 @@ impl Context {
 }
 
 pub fn file_is_already_encrypted(file: &String) -> Result<bool, CryptorError> {
-    let f = files::open_file(&file)?;
+    let f = files::open_file(&file)
+        .map_err(|_| CryptorError::FileError(FileOpenFailed))?;
     let mut reader = BufReader::new(f);
     let mut buffer = [0u8; 2];
 
-    reader.read_exact(&mut buffer)?;
+    reader.read_exact(&mut buffer)
+        .map_err(|_| CryptorError::ChunkReadFailed)?;
     Ok(buffer.eq(ENCRYPTED_FILE_HEADER))
 }
 

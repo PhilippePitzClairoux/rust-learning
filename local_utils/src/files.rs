@@ -16,7 +16,7 @@ pub fn open_file(path: &String) -> Result<File, FileError> {
 pub fn create_file(path: &String) -> Result<File, FileError> {
     match File::create(path) {
         Ok(file) => Ok(file),
-        Err(e) => Err(FileError::FileCreateFailed)
+        Err(_) => Err(FileError::FileCreateFailed)
     }
 }
 
@@ -44,6 +44,6 @@ pub fn replace_file(replace: &str, by: &str) -> Result<(), FileError> {
 
     fs::remove_file(replace)?;
     fs::rename(by, replace)?;
-    
+
     Ok(())
 }
