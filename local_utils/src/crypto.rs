@@ -1,16 +1,12 @@
-use std::error::Error;
-use std::fmt;
-use std::fmt::{format, Formatter};
 use sha2::Sha256;
 use rand::{TryRngCore};
 use aes_gcm::aead::{Aead};
 use aes_gcm::{Aes256Gcm, KeyInit, Nonce};
-use aes_gcm::aead::generic_array::GenericArray;
 use hkdf::{Hkdf};
-use crypto_common::InvalidLength;
 
+use crate::errors::Crypto as CryptoError;
 
-pub fn derive_key(password: &str, salt: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
+pub fn derive_key(password: &str, salt: &[u8]) -> Result<Vec<u8>, CryptoError> {
     let info = generate_random_vector(0).as_slice().to_owned();
     let mut output = vec![0u8; 32];
     let hk = Hkdf::<Sha256>::new(Some(&salt), &password.as_bytes());
@@ -20,7 +16,7 @@ pub fn derive_key(password: &str, salt: &[u8]) -> Result<Vec<u8>, Box<dyn Error>
     }
 }
 
-pub fn encrypt_chunk(input: &[u8], passphrase: &str, salt: &[u8], nonce: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
+pub fn encrypt_chunk(input: &[u8], passphrase: &str, salt: &[u8], nonce: &[u8]) -> Result<Vec<u8>, CryptoError> {
     let derived_key = derive_key(passphrase, salt)?;
     println!("derived key: {:?}", derived_key);
     match Aes256Gcm::new_from_slice(derived_key.as_slice()) {
@@ -34,18 +30,9 @@ pub fn encrypt_chunk(input: &[u8], passphrase: &str, salt: &[u8], nonce: &[u8]) 
     }
 }
 
-pub fn decrypt_chunk(input: &[u8], passphrase: &str, salt: &[u8], nonce: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
+pub fn decrypt_chunk(input: &[u8], passphrase: &str, salt: &[u8], nonce: &[u8]) -> Result<Vec<u8>, CryptoError> {
     let derived_key = derive_key(passphrase, salt)?;
-    // match Aes256Gcm::new_from_slice(derived_key.as_slice()) {
-    //     Ok(cipher) => {
-    //         match cipher.decrypt(Nonce::from_slice(nonce), input) {
-    //             Ok(decrypted) => Ok(decrypted),
-    //             Err(e) => panic!("could not decrypt chunk: {}", e)
-    //         }
-    //     },
-    //     Err(e) => panic!("could not generate cipher: {}", e)
-    // }
-    println!("derived key: {:?}", derived_key);
+
     let cipher= Aes256Gcm::new_from_slice(&derived_key)
         .expect("could not generate cipher");
     match cipher.decrypt(&Nonce::from_slice(nonce), input.as_ref()) {

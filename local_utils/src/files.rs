@@ -1,56 +1,49 @@
-use std::error::Error;
 use std::fs;
 use std::fs::File;
 use std::io::{Read, Write};
+use crate::errors::File as FileError;
 
 // Default chunk size - 5 MB
 pub const FILE_CHUNK_SIZE: u64 = 1024 * 1024;
 
-pub fn open_file(path: &String) -> Result<File, Box<dyn Error>> {
+pub fn open_file(path: &String) -> Result<File, FileError> {
     match File::open(path) {
         Ok(file) => Ok(file),
-        Err(e) => Err(e.into()),
+        Err(e) => Err(FileError::FileOpenFailed)
     }
 }
 
-pub fn create_file(path: &String) -> Result<File, Box<dyn Error>> {
+pub fn create_file(path: &String) -> Result<File, FileError> {
     match File::create(path) {
         Ok(file) => Ok(file),
-        Err(e) => Err(e.into())
+        Err(e) => Err(FileError::FileCreateFailed)
     }
 }
 
-pub fn read_chunk<R>(file: &mut R, size: usize) -> Result<Vec<u8>, Box<dyn Error>>
+pub fn read_chunk<R>(file: &mut R, size: usize) -> Result<Vec<u8>, FileError>
 where
     R: Read,
 {
     let mut buffer: Vec<u8> = vec![0u8; size];
-    match file.read(buffer.as_mut_slice()) {
-        Ok(s) => {
-            buffer.truncate(s);
-            Ok(buffer)
-        }
-        Err(e) => Err(e.into())
-    }
+    let s = file.read(buffer.as_mut_slice())?;
+    buffer.truncate(s);
+    Ok(buffer)
 }
 
-pub fn write_chunk<W>(file: &mut W, data: &[u8]) -> Result<(), Box<dyn Error>>
+pub fn write_chunk<W>(file: &mut W, data: &[u8]) -> Result<(), FileError>
 where
     W: Write,
 {
-    match file.write_all(data) {
-        Ok(_) => Ok(()),
-        Err(e) => Err(e.into())
-    }
+    file.write_all(data)?;
+    Ok(())
 }
 
-pub fn replace_file(replace: &str, by: &str) -> Result<(), Box<dyn Error>> {
+pub fn replace_file(replace: &str, by: &str) -> Result<(), FileError> {
     fs::exists(replace)?;
     fs::exists(by)?;
 
     fs::remove_file(replace)?;
-    match fs::rename(by, replace) {
-        Ok(_) => Ok(()),
-        Err(e) => Err(e.into())
-    }
+    fs::rename(by, replace)?;
+    
+    Ok(())
 }

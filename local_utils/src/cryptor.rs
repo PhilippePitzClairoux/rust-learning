@@ -5,6 +5,7 @@ use serde::{Serialize, Deserialize};
 use bincode::serde::{encode_into_std_write, decode_from_std_read};
 
 use crate::{crypto, files};
+use crate::errors::Cryptor as CryptorError;
 use crate::files::{read_chunk, FILE_CHUNK_SIZE};
 
 pub const SALT_SIZE: usize = 12;
@@ -82,7 +83,7 @@ impl Chunk {
         }
     }
 
-    pub fn encrypt(&mut self, password: &str, salt: &[u8]) -> Result<(), Box<dyn Error>> {
+    pub fn encrypt(&mut self, password: &str, salt: &[u8]) -> Result<(), CryptorError> {
         self.data = crypto::encrypt_chunk(
             &self.data, password, salt, &self.nonce
         )?;
@@ -90,7 +91,7 @@ impl Chunk {
         Ok(())
     }
 
-    pub fn decrypt(&mut self, password: &str, salt: &[u8]) -> Result<(), Box<dyn Error>> {
+    pub fn decrypt(&mut self, password: &str, salt: &[u8]) -> Result<(), CryptorError> {
         self.data = crypto::decrypt_chunk(
             &self.data.clone(), password, salt, &self.nonce
         )?;
@@ -110,7 +111,7 @@ pub fn write_encoded_chunk<W>(
     writer: &mut W,
     chunk: &ChunkType,
     config: &bincode::config::Configuration
-) -> Result<(), Box<dyn Error>>
+) -> Result<(), CryptorError>
 where
     W: Write,
 {
@@ -121,7 +122,7 @@ where
 pub fn read_decoded_chunk<R>(
     reader: &mut R,
     config: &bincode::config::Configuration
-) -> Result<ChunkType, Box<dyn Error>>
+) -> Result<ChunkType, CryptorError>
 where
     R: Read
 {
@@ -153,7 +154,7 @@ impl Context {
         }
     }
 
-    pub fn from_file_path(path: &str) -> Result<Self, Box<dyn Error>> {
+    pub fn from_file_path(path: &str) -> Result<Self, CryptorError> {
         let metadata = fs::metadata(path)?;
         Ok(Self {
             salt: crypto::generate_random_vector(SALT_SIZE),
@@ -161,8 +162,8 @@ impl Context {
             chunks: metadata.len() / FILE_CHUNK_SIZE,
         })
     }
-    
-    pub fn from_encrypted_source<T: Read>(reader: &mut T) -> Result<Self, Box<dyn Error>> {
+
+    pub fn from_encrypted_source<T: Read>(reader: &mut T) -> Result<Self, CryptorError> {
         let mut s = Self::new();
         s.load_header_from_reader(reader)?;
         Ok(s)
@@ -173,7 +174,7 @@ impl Context {
         self.chunks = header.chunks;
     }
 
-    pub fn load_header_from_reader(&mut self, reader: &mut impl Read) -> Result<(), Box<dyn Error>> {
+    pub fn load_header_from_reader(&mut self, reader: &mut impl Read) -> Result<(), CryptorError> {
         let header: ChunkType = read_decoded_chunk(reader, &self.config)?;
         match header {
             ChunkType::Header(header) => {
@@ -195,7 +196,7 @@ impl Context {
         reader: &mut R,
         writer: &mut W,
         password: &str
-    ) -> Result<(), Box<dyn Error>>
+    ) -> Result<(), CryptorError>
     where
         R: Read,
         W: Write
@@ -224,7 +225,7 @@ impl Context {
         reader: &mut R,
         writer: &mut W,
         password: &str,
-    ) -> Result<(), Box<dyn Error>>
+    ) -> Result<(), CryptorError>
     where
         R: Read,
         W: Write
@@ -256,7 +257,7 @@ impl Context {
     }
 }
 
-pub fn file_is_already_encrypted(file: &String) -> Result<bool, Box<dyn Error>> {
+pub fn file_is_already_encrypted(file: &String) -> Result<bool, CryptorError> {
     let f = files::open_file(&file)?;
     let mut reader = BufReader::new(f);
     let mut buffer = [0u8; 2];
