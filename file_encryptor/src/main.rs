@@ -1,15 +1,24 @@
-use std::fs::{File, Metadata};
+use std::cmp::PartialEq;
+use std::fs::{File};
 use std::io::{BufReader, BufWriter};
 use local_utils::{files, cryptor};
 use clap::{Parser, ValueEnum};
 use std::fs;
+use std::path::Path;
 use std::process::exit;
 
-#[derive(Debug, Clone, ValueEnum)]
+#[derive(Debug, Clone, PartialEq,ValueEnum)]
 enum Action {
     Encrypt,
     Decrypt
 }
+
+#[derive(Debug, Clone, ValueEnum)]
+enum Type {
+    File,
+    Directory
+}
+
 
 #[derive(Parser, Debug)]
 #[command(
@@ -31,81 +40,132 @@ struct Args {
     #[arg(index = 3, help="Password used for encryption/decryption")]
     password: String,
 
-    // Output file name
-    #[arg(long, required = false, help="Where to output file - will override input if output is empty")]
-    output: Option<String>,
-}
+    #[arg(value_enum, long, required=false, help="Define the type of <input> (file, directory, etc...)",
+        default_value_t=Type::File)]
+    input_type: Type,
 
-fn encrypt_file(args: &Args, encrypted: &mut BufReader<File>, output_file_name: &String, writer: &mut BufWriter<File>) {
-    let is_encrypted = cryptor::file_is_already_encrypted(&args.input)
-        .expect("could not check if file was already encrypted");
+    #[arg(
+        long,
+        help="When true, directories will but put in a tar before encryption. When false, encrypt every file recursively",
+        default_value_t = true)
+    ]
+    directory_as_tar: bool,
 
-    if is_encrypted {
-        println!("{} is already encrypted!! Can't encrypt twice dummy...", &args.input);
-        exit(1);
-    }
-
-    let ctx = cryptor::Context::from_file_path(&args.input)
-        .expect("could not read input file");
-
-    println!("Encrypting {} ({})", args.input, output_file_name);
-    ctx.encrypt_file(encrypted, writer, args.password.as_str())
-        .expect("could not encrypt file");
+    #[arg(
+        long,
+        help="When true, will try to see if file is already encrypted. When false, encrypt no matter what.",
+        default_value_t = true
+    )]
+    check_input_encryption_status: bool,
 }
 
 fn main() {
     let args = Args::parse();
+    let input_file_info = fs::metadata(args.input.as_str())
+        .expect("Input file not found!");
 
-    // input file (read from here)
-    let input_file = files::open_file(&args.input).expect("could not open input file");
+    match &args.input_type {
+        Type::Directory => {
+            if !input_file_info.is_dir() {
+                println!("Input file is not a directory!");
+                exit(1);
+            }
 
-    // create a reader to read from input file
-    let mut reader = BufReader::new(input_file.try_clone().unwrap());
+            match &args.directory_as_tar {
+                true => {
+                    let input_file_name = format!("{}.tar", &args.input);
 
-    // decide if we replace input with output
-    let in_place = args.output.is_none();
+                    if args.action.eq(&Action::Encrypt) {
+                        let mut archive = tar::Builder::new(
+                            files::create_file(&input_file_name).expect("could not create archive output")
+                        );
 
-    // get the output filename (if none is provided, take input and append .enc)
-    let output_file_name =
-        args.output.clone()
-            .unwrap_or_else(|| format!("{}.enc", &args.input));
+                        archive.append_dir_all("", &args.input)
+                            .expect("could not append files to archive");
+                        archive.finish().expect("could not finish archive");
+                    }
 
-    // create output file
-    let output_file: File = files::create_file(&output_file_name)
-        .expect("could not create output file");
+                    handle_cryptor_file(&args, &input_file_name);
 
-    // create a bufwriter to append data to the output file
+                    if args.action.eq(&Action::Decrypt) {
+                        let file = files::open_file(&args.input)
+                            .expect("could not open tar file");
+
+                        let parent_directory = Path::new(&args.input).parent()
+                            .expect("could not get parent directory");
+
+                        let mut decrypted_archive = tar::Archive::new(file);
+
+                        decrypted_archive.unpack(&parent_directory)
+                            .expect("could not unpack tar archive");
+                    }
+                }
+                false => {
+
+                    fs::read_dir(&args.input).expect("could not walk directory")
+                        .for_each(|entry| {
+                            let input_file = String::from(
+                                entry.expect("could get directory entry").path().to_str()
+                                    .expect("could not convert path to string")
+                            );
+
+                            handle_cryptor_file(&args, &input_file);
+                        });
+                }
+            }
+        },
+        Type::File => {
+            if !input_file_info.is_file() {
+                println!("Input file is not a file!");
+                exit(1);
+            }
+
+            handle_cryptor_file(&args, &args.input);
+        }
+    }
+}
+
+fn handle_cryptor_file(args: &Args,input_file_name: &String) {
+    let mut reader = BufReader::new(
+        files::open_file(input_file_name).expect("could not open input file")
+    );
+
+    let output_file_name = format!("{}.enc", input_file_name);
     let mut writer: BufWriter<File> =
-        BufWriter::new(output_file.try_clone().unwrap());
+        BufWriter::new(files::create_file(
+            &output_file_name).expect("could not create output file")
+        );
 
-    match args.action {
+    match &args.action {
         Action::Encrypt => {
-            encrypt_file(&args, &mut reader, &output_file_name, &mut writer);
+            if cryptor::is_encrypted(input_file_name) {
+                println!("File is already encrypted : {}", input_file_name);
+                exit(1);
+            }
 
+            println!("Encrypting {} ...", input_file_name);
+            let ctx = cryptor::Context::try_from_file_path(input_file_name)
+                .expect("could not generate cryptor context from input file");
+
+            ctx.encrypt_file(&mut reader, &mut writer, &args.password)
+                .expect("could not encrypt file");
         }
         Action::Decrypt => {
+            if !cryptor::is_encrypted(input_file_name) {
+                println!("File already decrypted : {}...", input_file_name);
+                exit(1);
+            }
+            println!("Decrypting {}...", &input_file_name);
+
             let mut ctx = cryptor::Context::new();
             ctx.decrypt_file(&mut reader, &mut writer, &args.password)
                 .expect("could not decrypt file");
-
         }
     }
 
+    files::replace_file(input_file_name, output_file_name.as_str())
+        .expect("could not override input file with output file");
 
-    let output_metadata: Metadata;
-    if in_place {
-        files::replace_file(&args.input, &output_file_name)
-            .expect("could not replace input file with output file");
-
-        output_metadata = fs::metadata(&args.input)
-            .expect("could not read output file");
-
-    } else {
-        output_metadata = fs::metadata(&output_file_name)
-            .expect("could not read output file");
-
-    }
-
-    println!("Done! Wrote {:?} bytes to {}", &output_metadata.len(), output_file_name);
+    println!("Done {:?} {}", &args.action, &output_file_name);
 }
 

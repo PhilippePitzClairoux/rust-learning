@@ -44,6 +44,6 @@ pub fn replace_file(replace: &str, by: &str) -> Result<(), FileError> {
 
     fs::remove_file(replace)?;
     fs::rename(by, replace)?;
-
+    
     Ok(())
 }

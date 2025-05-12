@@ -153,14 +153,15 @@ impl Context {
         }
     }
 
-    pub fn from_file_path(path: &str) -> Result<Self, CryptorError> {
+    pub fn try_from_file_path(path: &str) -> Result<Self, CryptorError> {
         let metadata = fs::metadata(path)
             .map_err(|_| CryptorError::FetchFileMetadataFailed)?;
+        let h = HeaderChunk::with_file_length(metadata.len());
 
         Ok(Self {
-            salt: crypto::generate_random_vector(SALT_SIZE),
-            config: bincode::config::standard(),
-            chunks: metadata.len() / FILE_CHUNK_SIZE,
+            salt: h.salt,
+            chunks: h.chunks,
+            config: bincode::config::standard()
         })
     }
 
@@ -235,40 +236,48 @@ impl Context {
         self.load_header_from_reader(reader)?;
 
         for _ in 0..self.chunks {
+            // read chunk
+            match read_decoded_chunk(reader, &self.config) {
+                Ok(ChunkType::Data(mut chunk)) => {
+                    // encrypt chunk
+                    chunk.decrypt(&password, &self.salt)?;
 
-
-            for _ in 0..self.chunks {
-                // read chunk
-                match read_decoded_chunk(reader, &self.config) {
-                    Ok(ChunkType::Data(mut chunk)) => {
-                        // encrypt chunk
-                        chunk.decrypt(&password, &self.salt)?;
-
-                        // output chunk
-                        writer.write_all(&chunk.data)
-                            .map_err(|_| CryptorError::ChunkWriteFailed)?;
-                        writer.flush()
-                            .map_err(|_| CryptorError::ChunkWriteFailed)?;
-                    }
-                    Ok(ChunkType::Header(_)) => panic!("invalid chunk type found (requires Data)"),
-                    Err(e) => panic!("error loading chunk: {}", e)
+                    // output chunk
+                    writer.write_all(&chunk.data)
+                        .map_err(|_| CryptorError::ChunkWriteFailed)?;
+                    writer.flush()
+                        .map_err(|_| CryptorError::ChunkWriteFailed)?;
                 }
+                Ok(ChunkType::Header(_)) => panic!("invalid chunk type found (requires Data)"),
+                Err(e) => panic!("error loading chunk: {}", e)
             }
         }
 
         Ok(())
     }
+
 }
 
-pub fn file_is_already_encrypted(file: &String) -> Result<bool, CryptorError> {
-    let f = files::open_file(&file)
-        .map_err(|_| CryptorError::FileError(FileOpenFailed))?;
-    let mut reader = BufReader::new(f);
-    let mut buffer = [0u8; 2];
+pub fn is_encrypted(path: &String) -> bool {
+    match files::open_file(&path) {
+        Ok(file) => {
+            let mut reader = BufReader::new(file);
+            match read_decoded_chunk(&mut reader, &bincode::config::standard()) {
+                Ok(chunk) => {
+                    match chunk {
+                        ChunkType::Header(header) => {
+                            header.header.eq(&ENCRYPTED_FILE_HEADER)
+                        }
+                        ChunkType::Data(_) => false,
+                    }
+                }
+                _ => false,
+            }
+        },
+        Err(_) => false,
+    }
 
-    reader.read_exact(&mut buffer)
-        .map_err(|_| CryptorError::ChunkReadFailed)?;
-    Ok(buffer.eq(ENCRYPTED_FILE_HEADER))
+
 }
 
 #[cfg(test)]
