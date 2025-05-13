@@ -6,19 +6,13 @@ use clap::{Parser, ValueEnum};
 use std::fs;
 use std::path::Path;
 use std::process::exit;
+use local_utils::cryptor::{Context, EncryptedType};
 
 #[derive(Debug, Clone, PartialEq,ValueEnum)]
 enum Action {
     Encrypt,
     Decrypt
 }
-
-#[derive(Debug, Clone, ValueEnum)]
-enum Type {
-    File,
-    Directory
-}
-
 
 #[derive(Parser, Debug)]
 #[command(
@@ -33,16 +27,12 @@ struct Args {
     action: Action,
 
     // Path to input file
-    #[arg(index = 2, help="Input file")]
+    #[arg(index = 2, help="Input")]
     input: String,
 
     // Password used for encryption
     #[arg(index = 3, help="Password used for encryption/decryption")]
     password: String,
-
-    #[arg(value_enum, long, required=false, help="Define the type of <input> (file, directory, etc...)",
-        default_value_t=Type::File)]
-    input_type: Type,
 
     #[arg(
         long,
@@ -62,70 +52,107 @@ struct Args {
 fn main() {
     let args = Args::parse();
     let input_file_info = fs::metadata(args.input.as_str())
-        .expect("Input file not found!");
+        .expect("Input not found!");
+    let input_is_encrypted = cryptor::is_encrypted(&args.input);
 
-    match &args.input_type {
-        Type::Directory => {
-            if !input_file_info.is_dir() {
-                println!("Input file is not a directory!");
-                exit(1);
-            }
+    match &args.action {
+        Action::Encrypt => {
 
-            match &args.directory_as_tar {
-                true => {
-                    let input_file_name = format!("{}.tar", &args.input);
+        }
+        Action::Decrypt => {
+            let mut reader = BufReader::new(
+                File::open(&args.input).expect("could not open input")
+            );
 
-                    if args.action.eq(&Action::Encrypt) {
-                        let mut archive = tar::Builder::new(
-                            files::create_file(&input_file_name).expect("could not create archive output")
-                        );
+            let mut ctx = Context::from_encrypted_source(&mut reader)
+                .expect("could not initialize cryptor context");
 
-                        archive.append_dir_all("", &args.input)
-                            .expect("could not append files to archive");
-                        archive.finish().expect("could not finish archive");
-                    }
-
-                    handle_cryptor_file(&args, &input_file_name);
-
-                    if args.action.eq(&Action::Decrypt) {
-                        let file = files::open_file(&args.input)
-                            .expect("could not open tar file");
-
-                        let parent_directory = Path::new(&args.input).parent()
-                            .expect("could not get parent directory");
-
-                        let mut decrypted_archive = tar::Archive::new(file);
-
-                        decrypted_archive.unpack(&parent_directory)
-                            .expect("could not unpack tar archive");
-                    }
+            println!("Decrypting {}...", &args.input);
+            match ctx.get_encrypted_type() {
+                EncryptedType::File => {
+                    ctx.decrypt_file(&mut reader,, &args.password)
+                        .expect("could not decrypt file");
                 }
-                false => {
-
-                    fs::read_dir(&args.input).expect("could not walk directory")
-                        .for_each(|entry| {
-                            let input_file = String::from(
-                                entry.expect("could get directory entry").path().to_str()
-                                    .expect("could not convert path to string")
-                            );
-
-                            handle_cryptor_file(&args, &input_file);
-                        });
+                EncryptedType::ArchivedDirectory => {
+                    ctx.decrypt_file(&mut reader, , &args.password)
+                        .expect("could not decrypt directory");
+                }
+                EncryptedType::Undefined => {
+                    panic!("undefined encrypted file type!")
                 }
             }
-        },
-        Type::File => {
-            if !input_file_info.is_file() {
-                println!("Input file is not a file!");
-                exit(1);
-            }
-
-            handle_cryptor_file(&args, &args.input);
         }
     }
+
+    if input_file_info.is_dir() || args.input.ends_with(".tar") {
+        match &args.directory_as_tar {
+            true => {
+                let input_file_name =
+                    if !&args.input.ends_with(".tar") {
+                        format!("{}.tar", &args.input).as_str().to_owned()
+                    } else {
+                        args.input.clone().as_str().to_owned()
+                    };
+
+
+                if args.action.eq(&Action::Encrypt) {
+                    archive_directory(&args, &input_file_name);
+                }
+
+                if args.action.eq(&Action::Decrypt) {
+                    extract_decrypted_archive(&args, &input_file_name);
+                }
+            }
+            false => {
+                process_directory_files(&args);
+            }
+        }
+    } else if (input_file_info.is_file()) {
+        handle_cryptor_file(&args, &args.input);
+
+    }
+
 }
 
-fn handle_cryptor_file(args: &Args,input_file_name: &String) {
+fn process_directory_files(args: &Args) {
+    fs::read_dir(&args.input).expect("could not walk directory")
+        .for_each(|entry| {
+            let input_file = String::from(
+                entry.expect("could get directory entry").path().to_str()
+                    .expect("could not convert path to string")
+            );
+
+            handle_cryptor_file(&args, &input_file);
+        });
+}
+
+fn extract_decrypted_archive(args: &Args, input_file_name: &String) {
+    handle_cryptor_file(&args, &input_file_name.to_string());
+
+    let file = files::open_file(&args.input)
+        .expect("could not open tar file");
+
+    let mut decrypted_archive = tar::Archive::new(file);
+
+    decrypted_archive.unpack(&args.input.clone().replace(".tar", ""))
+        .expect("could not unpack tar archive");
+    fs::remove_file(&args.input).expect("could not remove old file");
+}
+
+fn archive_directory(args: &Args, input_file_name: &String) {
+    let mut archive = tar::Builder::new(
+        files::create_file(&input_file_name.to_string()).expect("could not create archive output")
+    );
+
+    archive.append_dir_all("", &args.input)
+        .expect("could not append files to archive");
+    archive.finish().expect("could not finish archive");
+
+    handle_cryptor_file(&args, &input_file_name.to_string());
+    fs::remove_dir_all(&args.input).expect("could not remove old directory");
+}
+
+fn handle_cryptor_file(args: &Args, input_file_name: &String) {
     let mut reader = BufReader::new(
         files::open_file(input_file_name).expect("could not open input file")
     );
@@ -151,11 +178,6 @@ fn handle_cryptor_file(args: &Args,input_file_name: &String) {
                 .expect("could not encrypt file");
         }
         Action::Decrypt => {
-            if !cryptor::is_encrypted(input_file_name) {
-                println!("File already decrypted : {}...", input_file_name);
-                exit(1);
-            }
-            println!("Decrypting {}...", &input_file_name);
 
             let mut ctx = cryptor::Context::new();
             ctx.decrypt_file(&mut reader, &mut writer, &args.password)

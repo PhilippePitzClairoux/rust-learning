@@ -13,9 +13,18 @@ pub const TOTAL_CHUNK_SIZE: usize = FILE_CHUNK_SIZE as usize + SALT_SIZE + NONCE
 pub const ENCRYPTED_FILE_HEADER: &[u8;2] = &[0x43, 0x46]; // CF
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub enum EncryptedType {
+    File,
+    ArchivedDirectory,
+    Undefined
+}
+
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct HeaderChunk {
     #[serde(with = "serde_bytes")]
-    pub header: Vec<u8>,
+    header: Vec<u8>,
+
+    file_type: EncryptedType,
 
     #[serde(with = "serde_bytes")]
     salt: Vec<u8>,
@@ -28,6 +37,7 @@ impl HeaderChunk {
     pub fn new() -> Self {
         Self {
             header: ENCRYPTED_FILE_HEADER.to_vec(),
+            file_type: EncryptedType::Undefined,
             salt: crypto::generate_random_vector(SALT_SIZE).try_into().unwrap(),
             chunks: 0
         }
@@ -36,13 +46,15 @@ impl HeaderChunk {
     pub fn from_ctx(ctx: &Context) -> Self {
         Self {
             header: ENCRYPTED_FILE_HEADER.to_vec(),
-            salt: ctx.salt.clone(),
-            chunks: ctx.chunks
+            file_type: EncryptedType::Undefined,
+            salt: ctx.header_chunk.salt.clone(),
+            chunks: ctx.header_chunk.chunks
         }
     }
     pub fn from(header: &[u8], salt: &[u8], chunks: u64) -> Self {
         Self {
             header: header.to_vec(),
+            file_type: EncryptedType::Undefined,
             salt: salt.to_vec(),
             chunks
         }
@@ -53,6 +65,7 @@ impl HeaderChunk {
         Self {
             header: tmp.header,
             salt: tmp.salt,
+            file_type: EncryptedType::Undefined,
             chunks: (file_length / TOTAL_CHUNK_SIZE as u64) + 1
         }
     }
@@ -130,25 +143,25 @@ where
 }
 
 pub struct Context {
-    salt: Vec<u8>,
-    chunks: u64,
     config: bincode::config::Configuration,
+    header_chunk: HeaderChunk,
+    was_loaded_from_file: bool
 }
 
 impl Context {
     pub fn new() -> Self {
         let h = HeaderChunk::new();
         Self {
-            salt: h.salt,
-            chunks: 1,
+            was_loaded_from_file: false,
+            header_chunk: h,
             config: bincode::config::standard(),
         }
     }
 
     pub fn from_header(header: HeaderChunk) -> Self {
         Self {
-            salt: header.salt.clone(),
-            chunks: header.chunks,
+            was_loaded_from_file: true,
+            header_chunk: header,
             config: bincode::config::standard(),
         }
     }
@@ -159,8 +172,8 @@ impl Context {
         let h = HeaderChunk::with_file_length(metadata.len());
 
         Ok(Self {
-            salt: h.salt,
-            chunks: h.chunks,
+            was_loaded_from_file: false,
+            header_chunk: h,
             config: bincode::config::standard()
         })
     }
@@ -168,12 +181,13 @@ impl Context {
     pub fn from_encrypted_source<T: Read>(reader: &mut T) -> Result<Self, CryptorError> {
         let mut s = Self::new();
         s.load_header_from_reader(reader)?;
+        s.was_loaded_from_file = true;
+
         Ok(s)
     }
 
     pub fn load_header(&mut self, header: &HeaderChunk) {
-        self.salt = header.salt.clone();
-        self.chunks = header.chunks;
+        self.header_chunk = header.clone();
     }
 
     pub fn load_header_from_reader(&mut self, reader: &mut impl Read) -> Result<(), CryptorError> {
@@ -186,6 +200,7 @@ impl Context {
                     return Err(CryptorError::FileNotEncrypted)
                 }
 
+                self.was_loaded_from_file = true;
                 Ok(())
             },
             _ => Err(CryptorError::UnexpectedChunk)
@@ -206,7 +221,7 @@ impl Context {
             writer, &ChunkType::Header(HeaderChunk::from_ctx(&self)), &self.config
         )?;
 
-        for _ in 0..self.chunks {
+        for _ in 0..self.header_chunk.chunks {
             // read a chunk
             let mut chunk = Chunk::from(
                 read_chunk(reader, FILE_CHUNK_SIZE as usize)
@@ -214,7 +229,7 @@ impl Context {
             );
 
             // decrypt chunk
-            chunk.encrypt(&password, &self.salt)?;
+            chunk.encrypt(&password, &self.header_chunk.salt)?;
 
             write_encoded_chunk(writer, &ChunkType::Data(chunk), &self.config)?;
         }
@@ -233,14 +248,17 @@ impl Context {
         W: Write
     {
 
-        self.load_header_from_reader(reader)?;
+        if !self.was_loaded_from_file {
+            self.load_header_from_reader(reader)?;
+            self.was_loaded_from_file = true;
+        }
 
-        for _ in 0..self.chunks {
+        for _ in 0..self.header_chunk.chunks {
             // read chunk
             match read_decoded_chunk(reader, &self.config) {
                 Ok(ChunkType::Data(mut chunk)) => {
                     // encrypt chunk
-                    chunk.decrypt(&password, &self.salt)?;
+                    chunk.decrypt(&password, &self.header_chunk.salt)?;
 
                     // output chunk
                     writer.write_all(&chunk.data)
@@ -254,6 +272,10 @@ impl Context {
         }
 
         Ok(())
+    }
+
+    pub fn get_encrypted_type(&self) -> EncryptedType {
+        self.header_chunk.file_type.clone()
     }
 
 }
