@@ -4,7 +4,6 @@ use bincode::serde::{encode_into_std_write, decode_from_std_read};
 
 use crate::{crypto, files};
 use crate::errors::Cryptor as CryptorError;
-use crate::errors::File::FileOpenFailed;
 use crate::files::{read_chunk, FILE_CHUNK_SIZE};
 
 pub const SALT_SIZE: usize = 12;
@@ -266,8 +265,8 @@ impl Context {
                     writer.flush()
                         .map_err(|_| CryptorError::ChunkWriteFailed)?;
                 }
-                Ok(ChunkType::Header(_)) => panic!("invalid chunk type found (requires Data)"),
-                Err(e) => panic!("error loading chunk: {}", e)
+                Ok(ChunkType::Header(_)) => return Err(CryptorError::UnexpectedChunk),
+                Err(e) => return Err(e),
             }
         }
 
