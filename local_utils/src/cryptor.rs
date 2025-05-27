@@ -15,7 +15,6 @@ pub const ENCRYPTED_FILE_HEADER: &[u8;2] = &[0x43, 0x46]; // CF
 pub enum EncryptedType {
     File,
     ArchivedDirectory,
-    Undefined
 }
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -36,16 +35,16 @@ impl HeaderChunk {
     pub fn new() -> Self {
         Self {
             header: ENCRYPTED_FILE_HEADER.to_vec(),
-            file_type: EncryptedType::Undefined,
+            file_type: EncryptedType::File,
             salt: crypto::generate_random_vector(SALT_SIZE).try_into().unwrap(),
-            chunks: 0
+            chunks: 1 // always at least 1 chunk...
         }
     }
 
     pub fn from_ctx(ctx: &Context) -> Self {
         Self {
             header: ENCRYPTED_FILE_HEADER.to_vec(),
-            file_type: EncryptedType::Undefined,
+            file_type: ctx.header_chunk.file_type.clone(),
             salt: ctx.header_chunk.salt.clone(),
             chunks: ctx.header_chunk.chunks
         }
@@ -53,7 +52,7 @@ impl HeaderChunk {
     pub fn from(header: &[u8], salt: &[u8], chunks: u64) -> Self {
         Self {
             header: header.to_vec(),
-            file_type: EncryptedType::Undefined,
+            file_type: EncryptedType::File,
             salt: salt.to_vec(),
             chunks
         }
@@ -64,7 +63,7 @@ impl HeaderChunk {
         Self {
             header: tmp.header,
             salt: tmp.salt,
-            file_type: EncryptedType::Undefined,
+            file_type: EncryptedType::File,
             chunks: (file_length / TOTAL_CHUNK_SIZE as u64) + 1
         }
     }
@@ -233,6 +232,7 @@ impl Context {
             write_encoded_chunk(writer, &ChunkType::Data(chunk), &self.config)?;
         }
 
+        writer.flush().map_err(|_| CryptorError::FileWriteFailed)?;
         Ok(())
     }
 
@@ -262,14 +262,14 @@ impl Context {
                     // output chunk
                     writer.write_all(&chunk.data)
                         .map_err(|_| CryptorError::ChunkWriteFailed)?;
-                    writer.flush()
-                        .map_err(|_| CryptorError::ChunkWriteFailed)?;
                 }
                 Ok(ChunkType::Header(_)) => return Err(CryptorError::UnexpectedChunk),
                 Err(e) => return Err(e),
             }
         }
 
+        writer.flush()
+            .map_err(|_| CryptorError::ChunkWriteFailed)?;
         Ok(())
     }
 

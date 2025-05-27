@@ -50,6 +50,9 @@ pub enum Cryptor {
     #[error("file error")]
     FileError(File),
 
+    #[error("file write error")]
+    FileWriteFailed,
+
     #[error("could not write chunk")]
     ChunkWriteFailed,
 

@@ -1,9 +1,9 @@
 use std::cmp::PartialEq;
 use std::fs::{File, Metadata};
-use std::io::{BufReader, BufWriter};
+use std::io::{BufReader, BufWriter, Seek, SeekFrom};
 use local_utils::{files, cryptor};
-use clap::{Parser, ValueEnum};
-use std::fs;
+use clap::{arg, Parser, ValueEnum};
+use std::{env, fs};
 use std::path::Path;
 use std::process::exit;
 use tempfile::NamedTempFile;
@@ -52,9 +52,8 @@ struct Args {
 
 fn main() {
     let args = Args::parse();
-    let input_file_info = fs::metadata(args.input.as_str())
-        .expect("Input not found!");
     let input_is_encrypted = cryptor::is_encrypted(&args.input);
+    let input_path = Path::new(&args.input);
 
     match &args.action {
         Action::Encrypt => {
@@ -63,14 +62,23 @@ fn main() {
                 exit(1);
             }
 
-            if input_file_info.is_dir() && args.directory_as_tar {
-                encrypt_directory_as_tar()
-            } else if input_file_info.is_dir() {
-                encrypt_directory_files()
-            } else if input_file_info.is_file() {
-                encrypt_file(&args, &args.input);
-            } else {
-                panic!("unknowned file type")
+            match (input_path.is_file(), input_path.is_dir(), args.directory_as_tar) {
+                (true, false, _) => {
+                    encrypt_file(&args, &input_path);
+                }
+                (false, true, false) => {
+                    process_directory_files(&args)
+                }
+                (false, true, true) => {
+                    let archive_to_encrypt = archive_directory(&args.input);
+                    encrypt_file(
+                        &args,
+                        Path::new(&archive_to_encrypt)
+                    );
+                }
+                _ => {
+                    panic!("input file is a file and a directory at the same time???")
+                }
             }
         }
         Action::Decrypt => {
@@ -79,54 +87,61 @@ fn main() {
                 exit(1);
             }
 
-            decrypt_file(&args);
+            decrypt_file(&args, input_path);
         }
     }
 
     println!("Done {:?} {}", &args.action, &args.input);
 }
 
-fn encrypt_file(args: &Args, input_file: &String) {
-    let output = create_temp_file();
-    let input = File::open(input_file).expect("could not open input file");
+fn encrypt_file(args: &Args, input_file: &Path) {
+    let mut output = create_temp_file(
+        input_file.parent()
+            .expect("could not get input parent directory"),
+    );
 
-    let mut reader = BufReader::new(&input);
-    let mut writer = BufWriter::new(&output);
+    let mut input = File::options()
+        .write(true)
+        .read(true)
+        .open(input_file).expect("could not open input file");
 
     let ctx = Context::new();
-    ctx.encrypt_file(&mut reader, &mut writer, &args.password)
+    ctx.encrypt_file(&mut input, &mut output, &args.password)
         .expect("could not decrypt file");
 
-    files::replace_file(&mut BufWriter::new(&input), &mut BufReader::new(&output))
-        .expect("could not override input file with output file");
+    files::replace_file(
+        &args.input,
+        output.path()
+    ).expect("could not write tmp file to input")
 }
 
-fn decrypt_file(args: &Args) {
-    let output = create_temp_file();
-    let input = File::open(&args.input)
+fn decrypt_file(args: &Args, input_path: &Path) {
+    let mut output = create_temp_file(
+        input_path.parent()
+            .expect("could not get parent directory"),
+    );
+    let mut input = File::options()
+        .read(true)
+        .open(&args.input)
         .expect("could not open input");
 
-    let mut output_writer = BufWriter::new(&output);
-    let mut input_reader = BufReader::new(&input);
-    let mut ctx = Context::from_encrypted_source(&mut input_reader)
+    let mut ctx = Context::from_encrypted_source(&mut input)
         .expect("could not initialize cryptor context");
 
-
     println!("Decrypting {}...", &args.input);
-    ctx.decrypt_file(&mut input_reader, &mut output_writer, &args.password)
+    ctx.decrypt_file(&mut input, &mut output, &args.password)
         .expect("could not decrypt file");
 
-    files::replace_file(&mut BufWriter::new(&input), &mut BufReader::new(&output))
-        .expect("could not override input file with output file");
+    files::replace_file(
+        &args.input,
+        output.path()
+    ).expect("could not override input file with output file");
 
-    // post decryption task
+    // post decryption tasks
     match ctx.get_encrypted_type() {
-        EncryptedType::File => { /* nothing for now */ }
+        EncryptedType::File => { /* nothing to do */ }
         EncryptedType::ArchivedDirectory => {
             extract_archive(&args.input.to_string());
-        }
-        EncryptedType::Undefined => {
-            panic!("undefined encrypted file type!")
         }
     }
 }
@@ -138,7 +153,10 @@ fn process_directory_files(args: &Args) {
                     .expect("could not convert path to string")
             );
 
-            encrypt_file(&args, &input_file);
+            encrypt_file(
+                &args,
+                Path::new(&input_file)
+            );
         });
 }
 
@@ -154,7 +172,7 @@ fn extract_archive(path: &String) {
 }
 
 fn archive_directory(path: &str) -> String {
-    let input_file_name= format!("{}.tar", path.clone());
+    let input_file_name= format!("{}.tar", path);
     let mut archive = tar::Builder::new(
         files::create_file(&input_file_name.to_string()).expect("could not create archive output")
     );
@@ -166,7 +184,8 @@ fn archive_directory(path: &str) -> String {
     input_file_name.to_owned()
 }
 
-fn create_temp_file() -> File {
-
-    tempfile::tempfile().expect("could not create temp file")
+fn create_temp_file(target_dir: &Path) -> NamedTempFile {
+    tempfile::Builder::new()
+        .tempfile_in(target_dir)
+        .expect("could not create temporary file")
 }

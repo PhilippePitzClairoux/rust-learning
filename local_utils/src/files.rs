@@ -1,6 +1,7 @@
 use std::{fs, io};
-use std::fs::File;
-use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
+use std::fs::{File, OpenOptions};
+use std::io::{BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write};
+use std::path::Path;
 use crate::errors::File as FileError;
 
 // Default chunk size - 5 MB
@@ -38,12 +39,7 @@ where
     Ok(())
 }
 
-pub fn replace_file(replace: &mut File, by: &mut File) -> Result<(), FileError> {
-
-    replace.seek(SeekFrom::Start(0))?;
-    by.seek(SeekFrom::Start(0))?;
-
-    io::copy(by, replace)?;
-
+pub fn replace_file(output: &str, input: &Path) -> Result<(), FileError> {
+    fs::rename(input, output)?;
     Ok(())
 }
