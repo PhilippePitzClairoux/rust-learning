@@ -1,9 +1,8 @@
 use std::cmp::PartialEq;
-use std::fs::{File, Metadata};
-use std::io::{BufReader, BufWriter, Seek, SeekFrom};
+use std::fs::File;
 use local_utils::{files, cryptor};
 use clap::{arg, Parser, ValueEnum};
-use std::{env, fs};
+use std::fs;
 use std::path::Path;
 use std::process::exit;
 use tempfile::NamedTempFile;

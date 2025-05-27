@@ -1,6 +1,6 @@
-use std::{fs, io};
-use std::fs::{File, OpenOptions};
-use std::io::{BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write};
+use std::fs;
+use std::fs::File;
+use std::io::{Read, Write};
 use std::path::Path;
 use crate::errors::File as FileError;
 
@@ -10,7 +10,7 @@ pub const FILE_CHUNK_SIZE: u64 = 1024 * 1024;
 pub fn open_file(path: &String) -> Result<File, FileError> {
     match File::open(path) {
         Ok(file) => Ok(file),
-        Err(e) => Err(FileError::FileOpenFailed)
+        Err(_) => Err(FileError::FileOpenFailed)
     }
 }
 

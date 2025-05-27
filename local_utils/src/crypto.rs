@@ -12,7 +12,7 @@ pub fn derive_key(password: &str, salt: &[u8]) -> Result<Vec<u8>, CryptoError> {
     let hk = Hkdf::<Sha256>::new(Some(&salt), &password.as_bytes());
     match hk.expand(info.as_slice(), &mut output) {
         Ok(_) => Ok(output),
-        Err(e) => Err(CryptoError::KeyDeriveFailed)
+        Err(_) => Err(CryptoError::KeyDeriveFailed)
     }
 }
 
@@ -25,7 +25,7 @@ pub fn encrypt_chunk(input: &[u8], passphrase: &str, salt: &[u8], nonce: &[u8]) 
                 Err(_) => Err(CryptoError::EncryptFailed)
             }
         },
-        Err(e) => Err(CryptoError::CipherInitializationFailed)
+        Err(_) => Err(CryptoError::CipherInitializationFailed)
     }
 }
 
@@ -36,7 +36,7 @@ pub fn decrypt_chunk(input: &[u8], passphrase: &str, salt: &[u8], nonce: &[u8]) 
         .expect("could not generate cipher");
     match cipher.decrypt(&Nonce::from_slice(nonce), input.as_ref()) {
         Ok(decrypted) => Ok(decrypted),
-        Err(e) => Err(CryptoError::DecryptFailed)
+        Err(_) => Err(CryptoError::DecryptFailed)
     }
 }
 
