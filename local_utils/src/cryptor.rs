@@ -176,14 +176,6 @@ impl Context {
         })
     }
 
-    pub fn from_encrypted_source<T: Read>(reader: &mut T) -> Result<Self, CryptorError> {
-        let mut s = Self::new();
-        s.load_header_from_reader(reader)?;
-        s.was_loaded_from_file = true;
-
-        Ok(s)
-    }
-
     pub fn load_header(&mut self, header: &HeaderChunk) {
         self.header_chunk = header.clone();
     }
@@ -246,11 +238,8 @@ impl Context {
         R: Read,
         W: Write
     {
-
-        if !self.was_loaded_from_file {
-            self.load_header_from_reader(reader)?;
-            self.was_loaded_from_file = true;
-        }
+        
+        self.load_header_from_reader(reader)?;
 
         for _ in 0..self.header_chunk.chunks {
             // read chunk

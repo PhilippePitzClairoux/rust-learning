@@ -67,7 +67,7 @@ fn main() {
                     encrypt_file(&args, &input_path);
                 }
                 (false, true, false) => {
-                    process_directory_files(&args)
+                    process_directory_files(&args, &input_path);
                 }
                 (false, true, true) => {
                     let archive_to_encrypt = archive_directory(&args.input);
@@ -125,8 +125,7 @@ fn decrypt_file(args: &Args, input_path: &Path) {
         .open(&args.input)
         .expect("could not open input");
 
-    let mut ctx = Context::from_encrypted_source(&mut input)
-        .expect("could not initialize cryptor context");
+    let mut ctx = Context::new();
 
     println!("Decrypting {}...", &args.input);
     ctx.decrypt_file(&mut input, &mut output, &args.password)
@@ -145,18 +144,12 @@ fn decrypt_file(args: &Args, input_path: &Path) {
         }
     }
 }
-fn process_directory_files(args: &Args) {
-    fs::read_dir(&args.input).expect("could not walk directory")
+fn process_directory_files(args: &Args, input_file: &Path) {
+    input_file.read_dir().expect("could not walk directory")
         .for_each(|entry| {
-            let input_file = String::from(
-                entry.expect("could get directory entry").path().to_str()
-                    .expect("could not convert path to string")
-            );
+            let dir_entry = entry.expect("could not read entry");
 
-            encrypt_file(
-                &args,
-                Path::new(&input_file)
-            );
+            encrypt_file(&args, &dir_entry.path());
         });
 }
 
