@@ -1,7 +1,5 @@
-use std::fs;
 use std::io::{BufReader, Read, Write};
 use bincode::serde::{encode_into_std_write, decode_from_std_read};
-
 use crate::{crypto, files};
 use crate::errors::Cryptor as CryptorError;
 use crate::files::{read_chunk, FILE_CHUNK_SIZE};
@@ -11,10 +9,11 @@ pub const NONCE_SIZE: usize = 12;
 pub const TOTAL_CHUNK_SIZE: usize = FILE_CHUNK_SIZE as usize + SALT_SIZE + NONCE_SIZE;
 pub const ENCRYPTED_FILE_HEADER: &[u8;2] = &[0x43, 0x46]; // CF
 
+
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum EncryptedType {
-    File,
-    ArchivedDirectory,
+    Raw,
+    Archive,
 }
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -35,24 +34,16 @@ impl HeaderChunk {
     pub fn new() -> Self {
         Self {
             header: ENCRYPTED_FILE_HEADER.to_vec(),
-            file_type: EncryptedType::File,
+            file_type: EncryptedType::Raw,
             salt: crypto::generate_random_vector(SALT_SIZE).try_into().unwrap(),
             chunks: 1 // always at least 1 chunk...
         }
     }
 
-    pub fn from_ctx(ctx: &Context) -> Self {
-        Self {
-            header: ENCRYPTED_FILE_HEADER.to_vec(),
-            file_type: ctx.header_chunk.file_type.clone(),
-            salt: ctx.header_chunk.salt.clone(),
-            chunks: ctx.header_chunk.chunks
-        }
-    }
     pub fn from(header: &[u8], salt: &[u8], chunks: u64) -> Self {
         Self {
             header: header.to_vec(),
-            file_type: EncryptedType::File,
+            file_type: EncryptedType::Raw,
             salt: salt.to_vec(),
             chunks
         }
@@ -63,10 +54,19 @@ impl HeaderChunk {
         Self {
             header: tmp.header,
             salt: tmp.salt,
-            file_type: EncryptedType::File,
+            file_type: EncryptedType::Raw,
             chunks: (file_length / TOTAL_CHUNK_SIZE as u64) + 1
         }
     }
+
+    pub fn set_filetype(&mut self, file_type: EncryptedType) {
+        self.file_type = file_type;
+    }
+
+    pub fn get_filetype(&self) -> &EncryptedType {
+        &self.file_type
+    }
+
 }
 
 #[derive(Clone, Debug, PartialEq,serde::Serialize, serde::Deserialize)]
@@ -140,132 +140,86 @@ where
     Ok(chunk)
 }
 
-pub struct Context {
-    config: bincode::config::Configuration,
-    header_chunk: HeaderChunk,
-    was_loaded_from_file: bool
+pub fn load_header_from_reader(reader: &mut impl Read, config: &bincode::config::Configuration) -> Result<HeaderChunk, CryptorError> {
+    let header: ChunkType = read_decoded_chunk(reader, &config)?;
+    match header {
+        ChunkType::Header(header) => {
+            if header.header.ne(&ENCRYPTED_FILE_HEADER) {
+                return Err(CryptorError::FileNotEncrypted);
+            }
+            Ok(header)
+        },
+        _ => Err(CryptorError::UnexpectedChunk)
+    }
 }
 
-impl Context {
-    pub fn new() -> Self {
-        let h = HeaderChunk::new();
-        Self {
-            was_loaded_from_file: false,
-            header_chunk: h,
-            config: bincode::config::standard(),
-        }
+pub fn encrypt_stream<R, W>(
+    reader: &mut R,
+    writer: &mut W,
+    password: &str,
+    header: &HeaderChunk,
+    config: &bincode::config::Configuration
+) -> Result<(), CryptorError>
+where
+    R: Read,
+    W: Write
+{
+    // let writer = self.temp_file.as_file_mut();
+    write_encoded_chunk(
+        writer,
+        &ChunkType::Header(header.clone()),
+        &config
+    )?;
+
+    for _ in 0..header.chunks {
+        // read a chunk
+        let mut chunk = Chunk::from(
+            read_chunk(reader, FILE_CHUNK_SIZE as usize)
+                .map_err(|_| CryptorError::ChunkReadFailed)?
+        );
+
+        // decrypt chunk
+        chunk.encrypt(&password, &header.salt)?;
+
+        write_encoded_chunk(writer, &ChunkType::Data(chunk), &config)?;
     }
 
-    pub fn from_header(header: HeaderChunk) -> Self {
-        Self {
-            was_loaded_from_file: true,
-            header_chunk: header,
-            config: bincode::config::standard(),
-        }
-    }
+    writer.flush().map_err(|_| CryptorError::FileWriteFailed)?;
+    Ok(())
+}
 
-    pub fn try_from_file_path(path: &str) -> Result<Self, CryptorError> {
-        let metadata = fs::metadata(path)
-            .map_err(|_| CryptorError::FetchFileMetadataFailed)?;
-        let h = HeaderChunk::with_file_length(metadata.len());
+pub fn decrypt_stream<R, W>(
+    reader: &mut R,
+    writer: &mut W,
+    password: &str,
+    config: &bincode::config::Configuration
+) -> Result<HeaderChunk, CryptorError>
+where
+    R: Read,
+    W: Write
+{
+    // load header and prepare writer
+    let header = load_header_from_reader(reader, &config)?;
 
-        Ok(Self {
-            was_loaded_from_file: false,
-            header_chunk: h,
-            config: bincode::config::standard()
-        })
-    }
+    for _ in 0..header.chunks {
+        // read chunk
+        match read_decoded_chunk(reader, &config) {
+            Ok(ChunkType::Data(mut chunk)) => {
+                // encrypt chunk
+                chunk.decrypt(&password, &header.salt)?;
 
-    pub fn load_header(&mut self, header: &HeaderChunk) {
-        self.header_chunk = header.clone();
-    }
-
-    pub fn load_header_from_reader(&mut self, reader: &mut impl Read) -> Result<(), CryptorError> {
-        let header: ChunkType = read_decoded_chunk(reader, &self.config)?;
-        match header {
-            ChunkType::Header(header) => {
-                self.load_header(&header);
-
-                if header.header.ne(&ENCRYPTED_FILE_HEADER) {
-                    return Err(CryptorError::FileNotEncrypted)
-                }
-
-                self.was_loaded_from_file = true;
-                Ok(())
-            },
-            _ => Err(CryptorError::UnexpectedChunk)
-        }
-    }
-
-    pub fn encrypt_file<R, W>(
-        &self,
-        reader: &mut R,
-        writer: &mut W,
-        password: &str
-    ) -> Result<(), CryptorError>
-    where
-        R: Read,
-        W: Write
-    {
-        write_encoded_chunk(
-            writer, &ChunkType::Header(HeaderChunk::from_ctx(&self)), &self.config
-        )?;
-
-        for _ in 0..self.header_chunk.chunks {
-            // read a chunk
-            let mut chunk = Chunk::from(
-                read_chunk(reader, FILE_CHUNK_SIZE as usize)
-                    .map_err(|_| CryptorError::ChunkReadFailed)?
-            );
-
-            // decrypt chunk
-            chunk.encrypt(&password, &self.header_chunk.salt)?;
-
-            write_encoded_chunk(writer, &ChunkType::Data(chunk), &self.config)?;
-        }
-
-        writer.flush().map_err(|_| CryptorError::FileWriteFailed)?;
-        Ok(())
-    }
-
-    pub fn decrypt_file<R, W>(
-        &mut self,
-        reader: &mut R,
-        writer: &mut W,
-        password: &str,
-    ) -> Result<(), CryptorError>
-    where
-        R: Read,
-        W: Write
-    {
-        
-        self.load_header_from_reader(reader)?;
-
-        for _ in 0..self.header_chunk.chunks {
-            // read chunk
-            match read_decoded_chunk(reader, &self.config) {
-                Ok(ChunkType::Data(mut chunk)) => {
-                    // encrypt chunk
-                    chunk.decrypt(&password, &self.header_chunk.salt)?;
-
-                    // output chunk
-                    writer.write_all(&chunk.data)
-                        .map_err(|_| CryptorError::ChunkWriteFailed)?;
-                }
-                Ok(ChunkType::Header(_)) => return Err(CryptorError::UnexpectedChunk),
-                Err(e) => return Err(e),
+                // output chunk
+                writer.write_all(&chunk.data)
+                    .map_err(|_| CryptorError::ChunkWriteFailed)?;
             }
+            Ok(ChunkType::Header(_)) => return Err(CryptorError::UnexpectedChunk),
+            Err(e) => return Err(e),
         }
-
-        writer.flush()
-            .map_err(|_| CryptorError::ChunkWriteFailed)?;
-        Ok(())
     }
 
-    pub fn get_encrypted_type(&self) -> EncryptedType {
-        self.header_chunk.file_type.clone()
-    }
-
+    writer.flush()
+        .map_err(|_| CryptorError::ChunkWriteFailed)?;
+    Ok(header)
 }
 
 pub fn is_encrypted(path: &String) -> bool {
@@ -286,8 +240,6 @@ pub fn is_encrypted(path: &String) -> bool {
         },
         Err(_) => false,
     }
-
-
 }
 
 #[cfg(test)]

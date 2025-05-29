@@ -1,3 +1,4 @@
+use std::io;
 use thiserror::Error as ThisError;
 
 #[derive(ThisError, Debug)]
@@ -25,7 +26,10 @@ pub enum File {
     FileOpenFailed,
 
     #[error("could not create file")]
-    FileCreateFailed
+    FileCreateFailed,
+    
+    #[error("could not create temp file")]
+    TempFileCreationFailed,
 }
 
 #[derive(ThisError, Debug)]
@@ -46,7 +50,10 @@ pub enum Cryptor {
     ChunkReadFailed,
 
     #[error("file error")]
-    FileError(File),
+    FileError(#[from] File),
+
+    #[error("io error")]
+    IOOperationFailed(#[from] io::Error),
 
     #[error("file write error")]
     FileWriteFailed,
@@ -62,6 +69,13 @@ pub enum Cryptor {
 
     #[error("could not fetch file metadata")]
     FetchFileMetadataFailed,
+
+    #[error("this is not suppose to happen...")]
+    NoTempFileCreated,
+    
+    #[error("unexpected engine generator failure")]
+    UnexpectedEngineGeneratorFailure,
+    
 }
 
 #[derive(ThisError, Debug)]

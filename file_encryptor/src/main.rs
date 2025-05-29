@@ -1,12 +1,9 @@
 use std::cmp::PartialEq;
-use std::fs::File;
-use local_utils::{files, cryptor};
+use local_utils::{cryptor_engine, stream_encryption};
 use clap::{arg, Parser, ValueEnum};
-use std::fs;
 use std::path::Path;
 use std::process::exit;
-use tempfile::NamedTempFile;
-use local_utils::cryptor::{Context, EncryptedType};
+use local_utils::cryptor_engine::EngineGenerator;
 
 #[derive(Debug, Clone, PartialEq,ValueEnum)]
 enum Action {
@@ -51,8 +48,13 @@ struct Args {
 
 fn main() {
     let args = Args::parse();
-    let input_is_encrypted = cryptor::is_encrypted(&args.input);
+    let input_is_encrypted = stream_encryption::is_encrypted(&args.input);
     let input_path = Path::new(&args.input);
+    let engine_builder = cryptor_engine::EngineGeneratorBuilder::default()
+        .build().expect("could not generate cryptor engine generator");
+    let mut engine = engine_builder.from_path(input_path)
+        .expect("could not generate cryptor engine");
+
 
     match &args.action {
         Action::Encrypt => {
@@ -63,17 +65,15 @@ fn main() {
 
             match (input_path.is_file(), input_path.is_dir(), args.directory_as_tar) {
                 (true, false, _) => {
-                    encrypt_file(&args, &input_path);
+                    engine.encrypt_file(&args.password)
+                        .expect("could not encrypt file");
                 }
                 (false, true, false) => {
-                    process_directory_files(&args, &input_path);
+                    process_directory_files(&args, &input_path, engine_builder);
                 }
                 (false, true, true) => {
-                    let archive_to_encrypt = archive_directory(&args.input);
-                    encrypt_file(
-                        &args,
-                        Path::new(&archive_to_encrypt)
-                    );
+                    engine.encrypt_archive(&args.password)
+                        .expect("could not encrypt archive");
                 }
                 _ => {
                     panic!("input file is a file and a directory at the same time???")
@@ -86,98 +86,23 @@ fn main() {
                 exit(1);
             }
 
-            decrypt_file(&args, input_path);
+            engine.decrypt(&args.password)
+                .expect("could not decrypt file");
         }
     }
 
     println!("Done {:?} {}", &args.action, &args.input);
 }
 
-fn encrypt_file(args: &Args, input_file: &Path) {
-    let mut output = create_temp_file(
-        input_file.parent()
-            .expect("could not get input parent directory"),
-    );
 
-    let mut input = File::options()
-        .write(true)
-        .read(true)
-        .open(input_file).expect("could not open input file");
-
-    let ctx = Context::new();
-    ctx.encrypt_file(&mut input, &mut output, &args.password)
-        .expect("could not decrypt file");
-
-    files::replace_file(
-        &args.input,
-        output.path()
-    ).expect("could not write tmp file to input")
-}
-
-fn decrypt_file(args: &Args, input_path: &Path) {
-    let mut output = create_temp_file(
-        input_path.parent()
-            .expect("could not get parent directory"),
-    );
-    let mut input = File::options()
-        .read(true)
-        .open(&args.input)
-        .expect("could not open input");
-
-    let mut ctx = Context::new();
-
-    println!("Decrypting {}...", &args.input);
-    ctx.decrypt_file(&mut input, &mut output, &args.password)
-        .expect("could not decrypt file");
-
-    files::replace_file(
-        &args.input,
-        output.path()
-    ).expect("could not override input file with output file");
-
-    // post decryption tasks
-    match ctx.get_encrypted_type() {
-        EncryptedType::File => { /* nothing to do */ }
-        EncryptedType::ArchivedDirectory => {
-            extract_archive(&args.input.to_string());
-        }
-    }
-}
-fn process_directory_files(args: &Args, input_file: &Path) {
+fn process_directory_files(args: &Args, input_file: &Path, engine_generator: EngineGenerator) {
     input_file.read_dir().expect("could not walk directory")
         .for_each(|entry| {
             let dir_entry = entry.expect("could not read entry");
+            let mut engine = engine_generator.from_path(dir_entry.path().as_path())
+                .expect("could not generate engine generator");
 
-            encrypt_file(&args, &dir_entry.path());
+            engine.encrypt_file(&args.password)
+                .expect("could not encrypt file");
         });
-}
-
-fn extract_archive(path: &String) {
-    let file = files::open_file(path)
-        .expect("could not open tar file");
-    let mut decrypted_archive = tar::Archive::new(file);
-
-    decrypted_archive.unpack(path.clone().replace(".tar", ""))
-        .expect("could not unpack tar archive");
-
-    fs::remove_file(path).expect("could not remove old file");
-}
-
-fn archive_directory(path: &str) -> String {
-    let input_file_name= format!("{}.tar", path);
-    let mut archive = tar::Builder::new(
-        files::create_file(&input_file_name.to_string()).expect("could not create archive output")
-    );
-
-    archive.append_dir_all("", &path)
-        .expect("could not append files to archive");
-    archive.finish().expect("could not finish archive");
-
-    input_file_name.to_owned()
-}
-
-fn create_temp_file(target_dir: &Path) -> NamedTempFile {
-    tempfile::Builder::new()
-        .tempfile_in(target_dir)
-        .expect("could not create temporary file")
 }
