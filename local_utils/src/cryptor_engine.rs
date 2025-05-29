@@ -1,9 +1,8 @@
-use std::env;
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use derive_builder::Builder;
 use tempfile::NamedTempFile;
-use crate::{archives, files};
+use crate::{files};
 use crate::files::{create_temp_file, replace_file, safe_get_parent};
 use crate::stream_encryption::{decrypt_stream, encrypt_stream, EncryptedType, HeaderChunk};
 use crate::errors::Cryptor as CryptorError;
@@ -11,7 +10,10 @@ use crate::errors::Cryptor as CryptorError;
 
 #[derive(Builder)]
 pub struct EngineGenerator {
+    #[builder(default)]
     config: Option<bincode::config::Configuration>,
+
+    #[builder(default)]
     header_chunk: Option<HeaderChunk>,
 }
 
@@ -69,7 +71,7 @@ impl Engine {
                     .read(true)
                     .create(false)
                     .open(input_file_path)?,
-                input_file_path: input_file_path.clone().to_path_buf()
+                input_file_path: input_file_path.to_path_buf()
             }
         )
     }
@@ -112,7 +114,10 @@ impl Engine {
             password,
             &self.header_chunk,
             &self.config
-        )
+        )?;
+        
+        replace_file(self.temp_file.path(), self.input_file_path.as_path())?;
+        Ok(())
     }
     pub fn decrypt(&mut self, password: &str) -> Result<(), crate::errors::Cryptor> {
         let header = decrypt_stream(
