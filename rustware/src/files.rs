@@ -71,7 +71,7 @@ pub fn create_temp_dir(target_dir: &Path) -> Result<TempDir, FileError> {
 
 pub fn extract_archive(path: &Path) -> Result<(), FileError>{
     let mut archive = tar::Archive::new(
-        files::open_file(path)?
+        open_file(path)?
     );
     
     let target_directory = safe_get_parent(&path);
@@ -90,7 +90,9 @@ pub fn extract_archive(path: &Path) -> Result<(), FileError>{
     }?;
 
     archive.unpack(temp.as_path())?;
-    fs::rename(temp.as_path(), path)?;
+    
+    fs::remove_file(path)?;
+    replace_file(temp.as_path(), path)?;
     Ok(())
 }
 
