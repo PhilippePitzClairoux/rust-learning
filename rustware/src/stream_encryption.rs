@@ -164,7 +164,6 @@ where
     R: Read,
     W: Write
 {
-    // let writer = self.temp_file.as_file_mut();
     write_encoded_chunk(
         writer,
         &ChunkType::Header(header.clone()),
@@ -178,13 +177,13 @@ where
                 .map_err(|_| CryptorError::ChunkReadFailed)?
         );
 
-        // decrypt chunk
+        // encrypt chunk
         chunk.encrypt(&password, &header.salt)?;
 
         write_encoded_chunk(writer, &ChunkType::Data(chunk), &config)?;
     }
 
-    writer.flush().map_err(|_| CryptorError::FileWriteFailed)?;
+    writer.flush().map_err(|_| CryptorError::StreamFlushFailed)?;
     Ok(())
 }
 

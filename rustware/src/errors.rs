@@ -30,12 +30,15 @@ pub enum File {
     
     #[error("could not create temp file")]
     TempFileCreationFailed,
+
+    #[error("could not find file name")]
+    FileNameNotFound,
 }
 
 #[derive(ThisError, Debug)]
 pub enum Cryptor {
     #[error("could not perform encryption task")]
-    EncryptionFailed(Crypto),
+    CryptoError(Crypto),
 
     #[error("could not encode chunk")]
     EncodeChunkFailed(#[from] bincode::error::EncodeError),
@@ -49,14 +52,8 @@ pub enum Cryptor {
     #[error("could not read chunk")]
     ChunkReadFailed,
 
-    #[error("file error")]
-    FileError(#[from] File),
-
     #[error("io error")]
     IOOperationFailed(#[from] io::Error),
-
-    #[error("file write error")]
-    FileWriteFailed,
 
     #[error("could not write chunk")]
     ChunkWriteFailed,
@@ -67,15 +64,30 @@ pub enum Cryptor {
     #[error("unexpected chunk type found")]
     UnexpectedChunk,
 
-    #[error("could not fetch file metadata")]
-    FetchFileMetadataFailed,
+    #[error("stream flush failed")]
+    StreamFlushFailed,
+
+}
+
+#[derive(ThisError, Debug)]
+pub enum CryptorEngine {
+    #[error("unexpected engine generator failure")]
+    UnexpectedEngineGeneratorFailure,
 
     #[error("this is not suppose to happen...")]
     NoTempFileCreated,
-    
-    #[error("unexpected engine generator failure")]
-    UnexpectedEngineGeneratorFailure,
-    
+
+    #[error("unexpected cryptor failure")]
+    UnexpectedCryptorFailure(#[from] Cryptor),
+
+    #[error("unexpected file failure")]
+    UnexpectedFileFailure(#[from] File),
+
+    #[error("could not fetch file metadata")]
+    FetchFileMetadataFailed,
+
+    #[error("could not operate on file")]
+    FileIOError(#[from] io::Error),
 }
 
 #[derive(ThisError, Debug)]

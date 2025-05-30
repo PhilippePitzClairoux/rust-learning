@@ -92,7 +92,7 @@ dependencies = [
 name = "client"
 version = "0.1.0"
 dependencies = [
- "local_utils",
+ "rustware",
 ]
 
 [[package]]
@@ -341,24 +341,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cd945864f07fe9f5371a27ad7b52a172b4b499999f1d97574c9fa68373937e12"
 
 [[package]]
-name = "local_utils"
-version = "0.1.0"
-dependencies = [
- "aes-gcm",
- "bincode",
- "derive_builder",
- "hkdf",
- "lazy_static",
- "rand",
- "serde",
- "serde_bytes",
- "sha2",
- "tar",
- "tempfile",
- "thiserror",
-]
-
-[[package]]
 name = "once_cell"
 version = "1.21.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -473,6 +455,24 @@ dependencies = [
  "libc",
  "linux-raw-sys",
  "windows-sys",
+]
+
+[[package]]
+name = "rustware"
+version = "0.1.0"
+dependencies = [
+ "aes-gcm",
+ "bincode",
+ "derive_builder",
+ "hkdf",
+ "lazy_static",
+ "rand",
+ "serde",
+ "serde_bytes",
+ "sha2",
+ "tar",
+ "tempfile",
+ "thiserror",
 ]
 
 [[package]]

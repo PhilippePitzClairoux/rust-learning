@@ -9,5 +9,4 @@ pub mod files;
 pub mod stream_encryption;
 mod test_common;
 pub mod errors;
-pub mod archives;
 pub mod cryptor_engine;

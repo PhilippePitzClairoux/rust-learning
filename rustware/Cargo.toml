@@ -1,5 +1,5 @@
 [package]
-name = "local_utils"
+name = "rustware"
 version = "0.1.0"
 edition = "2024"
 
@@ -24,4 +24,4 @@ std = []
 test_utils = []
 
 [dev-dependencies]
-local_utils = { path = ".", features = ["test_utils"] }
+rustware = { path = ".", features = ["test_utils"] }
