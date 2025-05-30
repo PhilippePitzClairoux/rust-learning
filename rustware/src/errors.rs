@@ -1,4 +1,5 @@
 use std::io;
+use aes_gcm::aes::cipher::crypto_common;
 use thiserror::Error as ThisError;
 
 #[derive(ThisError, Debug)]
@@ -15,6 +16,9 @@ pub enum Crypto {
 
     #[error("could not derive key")]
     KeyDeriveFailed,
+    
+    #[error("invalid length")]
+    InvalidKeyLength(#[from] crypto_common::InvalidLength)
 }
 
 #[derive(ThisError, Debug)]

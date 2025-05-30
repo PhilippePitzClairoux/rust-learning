@@ -8,7 +8,13 @@ use crate::files::{create_temp_file, replace_file, safe_get_parent};
 use crate::stream_encryption::{decrypt_stream, encrypt_stream, EncryptedType, HeaderChunk};
 use crate::errors::{CryptorEngine as CryptorEngineError};
 
-
+/// Since an Engine can only encrypt one file, an EngineGenerator let's you create
+/// as many engine as you want and reuse the same bincode config and the same HeaderChunk.
+/// The header chunk is mainly use to specify the salt to use and the [encryption type](EncryptedType).
+///
+/// You should create a new engine (with engine_from_path) every time you encrypt/decrypt a file.
+/// If you don't supply a HeaderChunk, a new one will automatically be created when encrypting a file.
+///
 #[derive(Builder)]
 pub struct EngineGenerator {
     #[builder(default)]
@@ -19,6 +25,29 @@ pub struct EngineGenerator {
 }
 
 impl EngineGenerator {
+
+    /// This method let's us generate a cryptor engine using the settings we supplied in the EngineGenerator
+    /// as well as the supplied path (path to a file or a directory).
+    ///
+    /// This method will generate the new engine with the necessary parameters. Whether they are loaded
+    /// from the input_file_path or from the EngineGenerator settings depends on the engine goal.
+    ///
+    /// # Errors
+    ///     * can fail if the file/directory cannot be opened
+    ///     * can fail if a temp file cant be created
+    ///     * can fail when transfering configurations (should not happen)
+    ///
+    /// # Example
+    /// 
+    /// ```no_run
+    /// use rustware::cryptor_engine;
+    /// use std::path::Path;
+    ///     
+    ///  let target = Path::new("."); // target current directory
+    ///  let engine_builder = cryptor_engine::EngineGeneratorBuilder::default()
+    ///         .build().expect("could not generate cryptor engine generator");
+    ///  let engine = engine_builder.engine_from_path(target);
+    /// ```
     pub fn engine_from_path(&self, input_file_path: &Path) -> Result<Engine, CryptorEngineError> {
         let mut engine =match input_file_path.is_file() {
             true => {
@@ -31,7 +60,8 @@ impl EngineGenerator {
 
         if self.config.is_some() {
             engine.config =
-                self.config.ok_or(CryptorEngineError::UnexpectedEngineGeneratorFailure)?;
+                self.config.clone()
+                    .ok_or(CryptorEngineError::UnexpectedEngineGeneratorFailure)?;
         }
 
         if self.header_chunk.is_some() {

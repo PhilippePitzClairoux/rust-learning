@@ -6,6 +6,31 @@ use hkdf::{Hkdf};
 
 use crate::errors::{Crypto as CryptoError};
 
+/// Takes a password and a salt to derive a key. This is mostly used
+/// when encrypting/decrypting files. Produces a deterministic value -
+/// meaning the output will always be the same if you use the same password
+/// and salt. The password can be as long as you want, but the salt must be
+/// 12 bytes. It will always output a 32 byte long vector.
+///
+/// This function uses HKDF - HMAC sha256.
+/// Intended to be used with Aes256Gcm
+///
+/// # Errors
+///
+/// * This function can return errors when expanding the derived key into
+///     a vector (when returning)
+///
+/// # Examples
+/// ```no_run
+///  use rustware::crypto::derive_key;
+///
+///  let password = "Sup3rS3cr37P4ssw0rd";
+///  let salt: &[u8] = &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+///  println!(
+///     "Password : {}, Salt : {:?} , Derived : {:?}",
+///     password, salt, derive_key(password, salt).unwrap()
+///  );
+/// ```
 pub fn derive_key(password: &str, salt: &[u8]) -> Result<Vec<u8>, CryptoError> {
     let info = generate_random_vector(0).as_slice().to_owned();
     let mut output = vec![0u8; 32];
@@ -16,6 +41,38 @@ pub fn derive_key(password: &str, salt: &[u8]) -> Result<Vec<u8>, CryptoError> {
     }
 }
 
+/// This function takes a chunk (array of bytes) and encrypts it using a
+/// passphrase (password) and a salt (randomly generated ideally).
+///
+/// Derives a key using the password and salt and then encrypts the chunk
+/// using Aes256Gcm. Returns the encrypted data (or an error).
+///
+/// We also include a nonce, which is a unique salt for every chunk.
+/// The nonce is kind of like an identifier for the chunk that also
+/// affects the output of encryption. Helps us make sure data is even
+/// more unique and unreadable.
+///
+/// # Errors
+/// Many steps of chunk encryption can go wrong :
+///
+/// * key derivation error (when generating HMAC sha256 encryption key)
+/// * encryption error (either due to an unexpected IO error or an invalid
+///     encryption key)
+/// * Cipher initialization failure
+///
+/// # Examples
+///
+/// ```no_run
+/// use rustware::crypto;
+/// use rustware::crypto::encrypt_chunk;
+///
+/// let data = "Secret nuclear codes : 12345".as_bytes();
+/// let salt: &[u8] = &[255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255];
+/// let password = "Brute_Force_this_sucka!!";
+/// let nonce: &[u8] = &[1, 1, 1, 1,1, 1,1, 1,1, 1,1, 1];
+///
+/// println!("Encrypted : {:?}", encrypt_chunk(data, password, salt, nonce)?);
+/// ```
 pub fn encrypt_chunk(input: &[u8], passphrase: &str, salt: &[u8], nonce: &[u8]) -> Result<Vec<u8>, CryptoError> {
     let derived_key = derive_key(passphrase, salt)?;
     match Aes256Gcm::new_from_slice(derived_key.as_slice()) {
@@ -29,11 +86,34 @@ pub fn encrypt_chunk(input: &[u8], passphrase: &str, salt: &[u8], nonce: &[u8]) 
     }
 }
 
+/// This function does the reverse of encrypt_chunk. If you take encrypted bytes and
+/// supply the right passphrase, salt and nonce, the output will be the original data
+///
+/// # Errors
+///     * derive_key error (could not derive key from passphrase and salt)
+///     * Decryption failiure (either due to a decryption error or because
+///         the cipher could not be initialized properly
+///
+/// # Examples
+/// ```
+/// use rustware::crypto;
+/// use rustware::crypto::{decrypt_chunk, encrypt_chunk};
+///
+/// let data = "Secret nuclear codes : 12345".as_bytes();
+/// let salt: &[u8] = &[255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255];
+/// let password = "Brute_Force_this_sucka!!";
+/// let nonce: &[u8] = &[1, 1, 1, 1,1, 1,1, 1,1, 1,1, 1];
+///
+/// let encrypted_data = encrypt_chunk(data, password, salt, nonce).unwrap();
+/// let decrypted_data = decrypt_chunk(encrypted_data.as_slice(), password, salt, nonce).unwrap();
+///
+/// println!("Encrypted : {:?}", encrypted_data);
+/// println!("Decrypted : {:?}", decrypted_data);
+/// ```
 pub fn decrypt_chunk(input: &[u8], passphrase: &str, salt: &[u8], nonce: &[u8]) -> Result<Vec<u8>, CryptoError> {
     let derived_key = derive_key(passphrase, salt)?;
 
-    let cipher= Aes256Gcm::new_from_slice(&derived_key)
-        .expect("could not generate cipher");
+    let cipher= Aes256Gcm::new_from_slice(&derived_key)?;
     match cipher.decrypt(&Nonce::from_slice(nonce), input.as_ref()) {
         Ok(decrypted) => Ok(decrypted),
         Err(_) => Err(CryptoError::DecryptFailed)
@@ -49,6 +129,20 @@ pub fn byte_vector_to_string(bytes_vector: &Vec<u8>) -> String {
 
     output
 }
+
+/// This method uses secure rng in order to generate salts and nonces.
+///
+/// # Errors
+///     * Infaliable - should never happen. If it does, something's really wrong
+///         (thus why we panic)
+///
+/// # Examples
+/// ```no_run
+///     use rustware::crypto::generate_random_vector;
+///
+/// let my_vec = generate_random_vector(12);
+/// println!("Random vector : {:?}", my_vec);
+/// ```
 pub fn generate_random_vector(size: usize) -> Vec<u8> {
     let mut array = vec![0u8; size];
     let mut rng = rand::rng();
