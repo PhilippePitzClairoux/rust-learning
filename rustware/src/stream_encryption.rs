@@ -1,7 +1,7 @@
 use std::io::{BufReader, Read, Write};
 use bincode::serde::{encode_into_std_write, decode_from_std_read};
 use crate::{crypto, files};
-use crate::errors::Cryptor as CryptorError;
+use crate::errors::{Cryptor as CryptorError, Error};
 use crate::files::{read_chunk, FILE_CHUNK_SIZE};
 
 pub const SALT_SIZE: usize = 12;
@@ -93,7 +93,7 @@ impl Chunk {
         }
     }
 
-    pub fn encrypt(&mut self, password: &str, salt: &[u8]) -> Result<(), CryptorError> {
+    pub fn encrypt(&mut self, password: &str, salt: &[u8]) -> Result<(), Error> {
         self.data = crypto::encrypt_chunk(
             &self.data, password, salt, &self.nonce
         )?;
@@ -101,7 +101,7 @@ impl Chunk {
         Ok(())
     }
 
-    pub fn decrypt(&mut self, password: &str, salt: &[u8]) -> Result<(), CryptorError> {
+    pub fn decrypt(&mut self, password: &str, salt: &[u8]) -> Result<(), Error> {
         self.data = crypto::decrypt_chunk(
             &self.data.clone(), password, salt, &self.nonce
         )?;
@@ -121,35 +121,37 @@ pub fn write_encoded_chunk<W>(
     writer: &mut W,
     chunk: &ChunkType,
     config: &bincode::config::Configuration
-) -> Result<(), CryptorError>
+) -> Result<(), Error>
 where
     W: Write,
 {
-    let _ = encode_into_std_write(chunk, writer, config.clone())?;
+    let _ = encode_into_std_write(chunk, writer, config.clone())
+        .map_err(CryptorError::EncodeChunkFailed)?;
     Ok(())
 }
 
 pub fn read_decoded_chunk<R>(
     reader: &mut R,
     config: &bincode::config::Configuration
-) -> Result<ChunkType, CryptorError>
+) -> Result<ChunkType, Error>
 where
     R: Read
 {
-    let chunk: ChunkType = decode_from_std_read(reader, config.clone())?;
+    let chunk: ChunkType = decode_from_std_read(reader, config.clone())
+        .map_err(CryptorError::DecodeChunkFailed)?;
     Ok(chunk)
 }
 
-pub fn load_header_from_reader(reader: &mut impl Read, config: &bincode::config::Configuration) -> Result<HeaderChunk, CryptorError> {
+pub fn load_header_from_reader(reader: &mut impl Read, config: &bincode::config::Configuration) -> Result<HeaderChunk, Error> {
     let header: ChunkType = read_decoded_chunk(reader, &config)?;
     match header {
         ChunkType::Header(header) => {
             if header.header.ne(&ENCRYPTED_FILE_HEADER) {
-                return Err(CryptorError::FileNotEncrypted);
+                return Err(CryptorError::FileNotEncrypted.into());
             }
             Ok(header)
         },
-        _ => Err(CryptorError::UnexpectedChunk)
+        _ => Err(CryptorError::UnexpectedChunk.into())
     }
 }
 
@@ -159,7 +161,7 @@ pub fn encrypt_stream<R, W>(
     password: &str,
     header: &HeaderChunk,
     config: &bincode::config::Configuration
-) -> Result<(), CryptorError>
+) -> Result<(), Error>
 where
     R: Read,
     W: Write
@@ -192,7 +194,7 @@ pub fn decrypt_stream<R, W>(
     writer: &mut W,
     password: &str,
     config: &bincode::config::Configuration
-) -> Result<HeaderChunk, CryptorError>
+) -> Result<HeaderChunk, Error>
 where
     R: Read,
     W: Write
@@ -211,7 +213,7 @@ where
                 writer.write_all(&chunk.data)
                     .map_err(|_| CryptorError::ChunkWriteFailed)?;
             }
-            Ok(ChunkType::Header(_)) => return Err(CryptorError::UnexpectedChunk),
+            Ok(ChunkType::Header(_)) => return Err(CryptorError::UnexpectedChunk.into()),
             Err(e) => return Err(e),
         }
     }

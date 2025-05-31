@@ -4,7 +4,7 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use lazy_static::lazy_static;
 use tempfile::{NamedTempFile, TempDir};
-use crate::errors::File as FileError;
+use crate::errors::{File as FileError, Error};
 
 
 lazy_static! {
@@ -14,7 +14,7 @@ lazy_static! {
 }
 
 // Default chunk size - 5 MB
-pub const FILE_CHUNK_SIZE: u64 = 1024 * 1024;
+pub const FILE_CHUNK_SIZE: u64 = 1024 * 1024 * 2;
 
 /// Open a file for reading purposes. Returns a wrapped error if we can't.
 ///
@@ -29,10 +29,10 @@ pub const FILE_CHUNK_SIZE: u64 = 1024 * 1024;
 /// let shadow_reader = open_file(Path::new("/etc/shadow")).unwrap();
 /// println!("{:?}", shadow_reader)
 /// ```
-pub fn open_file<P: AsRef<Path>>(path: P) -> Result<File, FileError> {
+pub fn open_file<P: AsRef<Path>>(path: P) -> Result<File, Error> {
     match File::open(path) {
         Ok(file) => Ok(file),
-        Err(_) => Err(FileError::FileOpenFailed)
+        Err(e) => Err(e.into())
     }
 }
 
@@ -52,10 +52,10 @@ pub fn open_file<P: AsRef<Path>>(path: P) -> Result<File, FileError> {
 /// let mut f = create_file(Path::new("/tmp/wow.txt")).unwrap();
 /// f.write_all(b"Damn right!").unwrap();
 /// ```
-pub fn create_file<P: AsRef<Path>>(path: P) -> Result<File, FileError> {
+pub fn create_file<P: AsRef<Path>>(path: P) -> Result<File, Error> {
     match File::create(path) {
         Ok(file) => Ok(file),
-        Err(_) => Err(FileError::FileCreateFailed)
+        Err(e) => Err(e.into())
     }
 }
 
@@ -73,7 +73,7 @@ pub fn create_file<P: AsRef<Path>>(path: P) -> Result<File, FileError> {
 /// let mut shadow_reader = open_file(Path::new("/etc/shadow")).unwrap();
 /// let chunk = read_chunk(&mut shadow_reader, 4096); // read 4096 bytes from shadow_reader
 /// ```
-pub fn read_chunk<R>(file: &mut R, size: usize) -> Result<Vec<u8>, FileError>
+pub fn read_chunk<R>(file: &mut R, size: usize) -> Result<Vec<u8>, Error>
 where
     R: Read,
 {
@@ -81,6 +81,25 @@ where
     let s = file.read(buffer.as_mut_slice())?;
     buffer.truncate(s);
     Ok(buffer)
+}
+
+/// Rename `input` to `output`. This will completely erase the original content of `output`.
+/// The `input` file will be moved to the location of `output` with the exact same name.
+///
+/// # Errors
+///   * if one of the files is deleted beforehand
+///   * if the files aren't on the same device (linux only I belive)
+///
+/// # Examples
+/// ```no_run
+/// use std::path::Path;
+/// use rustware::files::replace_file;
+///  
+/// replace_file(Path::new("/tmp/a.xt"), Path::new("/tmp/b.txt")).unwrap();
+/// ```
+pub fn replace_file<P: AsRef<Path>, Q: AsRef<Path>>(input: P, output: Q) -> Result<(), Error> {
+    fs::rename(input, output)?;
+    Ok(())
 }
 
 /// Write a `data` (aka `chunk` aka vector of bytes) to target `file`
@@ -98,30 +117,11 @@ where
 /// let mut f = create_file(Path::new("/tmp/wow.txt")).unwrap();
 /// write_chunk(&mut f, "oh no... why all this wrapping!!!".as_bytes()).unwrap();
 /// ```
-pub fn write_chunk<W>(file: &mut W, data: &[u8]) -> Result<(), FileError>
+pub fn write_chunk<W>(file: &mut W, data: &[u8]) -> Result<(), Error>
 where
     W: Write,
 {
     file.write_all(data)?;
-    Ok(())
-}
-
-/// Rename `input` to `output`. This will completely erase the original content of `output`.
-/// The `input` file will be moved to the location of `output` with the exact same name.
-///
-/// # Errors
-///   * if one of the files is deleted beforehand
-///   * if the files aren't on the same device (linux only I belive)
-/// 
-/// # Examples
-/// ```no_run
-/// use std::path::Path;
-/// use rustware::files::replace_file;
-///  
-/// replace_file(Path::new("/tmp/a.xt"), Path::new("/tmp/b.txt")).unwrap();
-/// ```
-pub fn replace_file<P: AsRef<Path>, Q: AsRef<Path>>(input: P, output: Q) -> Result<(), FileError> {
-    fs::rename(input, output)?;
     Ok(())
 }
 
@@ -131,18 +131,20 @@ pub fn safe_get_parent(path: &Path) -> PathBuf {
         .to_path_buf()
 }
 
-pub fn create_temp_file(target_dir: &Path) -> Result<NamedTempFile, FileError> {
+pub fn create_temp_file(target_dir: &Path) -> Result<NamedTempFile, Error> {
     tempfile::Builder::new()
         .tempfile_in(target_dir)
-        .map_err(|_| FileError::TempFileCreationFailed)
+        .map_err(|e| e.into())
 }
 
-pub fn create_temp_dir(target_dir: &Path) -> Result<TempDir, FileError> {
-    tempfile::tempdir_in(target_dir)
-        .map_err(|_| FileError::TempFileCreationFailed)
+pub fn create_temp_dir(target_dir: &Path) -> Result<TempDir, Error> {
+    match tempfile::tempdir_in(target_dir) {
+        Ok(dir) => Ok(dir),
+        Err(e) => Err(e.into())
+    }
 }
 
-pub fn extract_archive(path: &Path) -> Result<(), FileError>{
+pub fn extract_archive(path: &Path) -> Result<(), Error>{
     let mut archive = tar::Archive::new(
         open_file(path)?
     );
@@ -169,7 +171,7 @@ pub fn extract_archive(path: &Path) -> Result<(), FileError>{
     Ok(())
 }
 
-pub fn archive(path: &Path) -> Result<NamedTempFile, FileError> {
+pub fn archive(path: &Path) -> Result<NamedTempFile, Error> {
     let mut archive = tar::Builder::new(
         create_temp_file(
             safe_get_parent(&path).as_path()
@@ -187,8 +189,7 @@ pub fn archive(path: &Path) -> Result<NamedTempFile, FileError> {
     }
 
 
-    let new_input_file = archive.into_inner()
-        .map_err(|e| FileError::FileManipulationFailed(e))?;
+    let new_input_file = archive.into_inner()?;
 
     replace_file(new_input_file.path(), path)?;
     Ok(new_input_file)
