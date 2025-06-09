@@ -4,7 +4,7 @@ use aes_gcm::aead::{Aead};
 use aes_gcm::{Aes256Gcm, KeyInit, Nonce};
 use hkdf::{Hkdf};
 
-use crate::errors::{Crypto as CryptoError};
+use crate::errors::{Crypto as CryptoError, Error};
 
 /// Takes a password and a salt to derive a key. This is mostly used
 /// when encrypting/decrypting files. Produces a deterministic value -
@@ -31,13 +31,13 @@ use crate::errors::{Crypto as CryptoError};
 ///     password, salt, derive_key(password, salt).unwrap()
 ///  );
 /// ```
-pub fn derive_key(password: &str, salt: &[u8]) -> Result<Vec<u8>, CryptoError> {
+pub fn derive_key(password: &str, salt: &[u8]) -> Result<Vec<u8>, Error> {
     let info = generate_random_vector(0).as_slice().to_owned();
     let mut output = vec![0u8; 32];
     let hk = Hkdf::<Sha256>::new(Some(&salt), &password.as_bytes());
     match hk.expand(info.as_slice(), &mut output) {
         Ok(_) => Ok(output),
-        Err(_) => Err(CryptoError::KeyDeriveFailed)
+        Err(_) => Err(CryptoError::KeyDeriveFailed.into())
     }
 }
 
@@ -73,16 +73,16 @@ pub fn derive_key(password: &str, salt: &[u8]) -> Result<Vec<u8>, CryptoError> {
 ///
 /// println!("Encrypted : {:?}", encrypt_chunk(data, password, salt, nonce)?);
 /// ```
-pub fn encrypt_chunk(input: &[u8], passphrase: &str, salt: &[u8], nonce: &[u8]) -> Result<Vec<u8>, CryptoError> {
+pub fn encrypt_chunk(input: &[u8], passphrase: &str, salt: &[u8], nonce: &[u8]) -> Result<Vec<u8>, Error> {
     let derived_key = derive_key(passphrase, salt)?;
     match Aes256Gcm::new_from_slice(derived_key.as_slice()) {
         Ok(cipher) => {
             match cipher.encrypt(&Nonce::from_slice(nonce), input) {
                 Ok(encrypted) => Ok(encrypted),
-                Err(_) => Err(CryptoError::EncryptFailed)
+                Err(_) => Err(CryptoError::EncryptFailed.into())
             }
         },
-        Err(_) => Err(CryptoError::CipherInitializationFailed)
+        Err(_) => Err(CryptoError::CipherInitializationFailed.into())
     }
 }
 
@@ -110,13 +110,14 @@ pub fn encrypt_chunk(input: &[u8], passphrase: &str, salt: &[u8], nonce: &[u8]) 
 /// println!("Encrypted : {:?}", encrypted_data);
 /// println!("Decrypted : {:?}", decrypted_data);
 /// ```
-pub fn decrypt_chunk(input: &[u8], passphrase: &str, salt: &[u8], nonce: &[u8]) -> Result<Vec<u8>, CryptoError> {
+pub fn decrypt_chunk(input: &[u8], passphrase: &str, salt: &[u8], nonce: &[u8]) -> Result<Vec<u8>, Error> {
     let derived_key = derive_key(passphrase, salt)?;
 
-    let cipher= Aes256Gcm::new_from_slice(&derived_key)?;
+    let cipher= Aes256Gcm::new_from_slice(&derived_key)
+        .map_err(|_| CryptoError::KeyDeriveFailed)?;
     match cipher.decrypt(&Nonce::from_slice(nonce), input.as_ref()) {
         Ok(decrypted) => Ok(decrypted),
-        Err(_) => Err(CryptoError::DecryptFailed)
+        Err(_) => Err(CryptoError::DecryptFailed.into())
     }
 }
 

@@ -3,6 +3,27 @@ use aes_gcm::aes::cipher::crypto_common;
 use thiserror::Error as ThisError;
 
 #[derive(ThisError, Debug)]
+pub enum Error {
+    #[error(transparent)]
+    Crypto(#[from] Crypto),
+
+    #[error(transparent)]
+    File(#[from] File),
+
+    #[error(transparent)]
+    Cryptor(#[from] Cryptor),
+
+    #[error(transparent)]
+    CryptorEngine(#[from] CryptorEngine),
+
+    #[error(transparent)]
+    Tcp(#[from] Tcp),
+    
+    #[error(transparent)]
+    IoError(#[from] io::Error),
+}
+
+#[derive(ThisError, Debug)]
 pub enum Crypto {
 
     #[error("could not encrypt chunk")]
@@ -24,19 +45,25 @@ pub enum Crypto {
 #[derive(ThisError, Debug)]
 pub enum File {
     #[error("could not manipulate file")]
-    FileManipulationFailed(#[from] std::io::Error),
+    FileManipulationFailed(#[from] io::Error),
 
     #[error("could not open file")]
     FileOpenFailed,
 
     #[error("could not create file")]
     FileCreateFailed,
+
+    #[error("could not read file")]
+    FileReadFailed,
     
     #[error("could not create temp file")]
     TempFileCreationFailed,
 
     #[error("could not find file name")]
     FileNameNotFound,
+    
+    #[error("could not write to file")]
+    FileWriteFailed,
 }
 
 #[derive(ThisError, Debug)]
@@ -92,6 +119,9 @@ pub enum CryptorEngine {
 
     #[error("could not operate on file")]
     FileIOError(#[from] io::Error),
+
+    #[error("file seek op failed")]
+    FileSeekFailed,
 }
 
 #[derive(ThisError, Debug)]

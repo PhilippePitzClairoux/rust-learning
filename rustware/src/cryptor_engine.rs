@@ -6,7 +6,7 @@ use tempfile::NamedTempFile;
 use crate::{files};
 use crate::files::{create_temp_file, replace_file, safe_get_parent};
 use crate::stream_encryption::{decrypt_stream, encrypt_stream, EncryptedType, HeaderChunk};
-use crate::errors::{CryptorEngine as CryptorEngineError};
+use crate::errors::{CryptorEngine as CryptorEngineError, CryptorEngine, Error};
 
 /// Since an Engine can only encrypt one file, an EngineGenerator let's you create
 /// as many engine as you want and reuse the same bincode config and the same HeaderChunk.
@@ -48,7 +48,7 @@ impl EngineGenerator {
     ///         .build().expect("could not generate cryptor engine generator");
     ///  let engine = engine_builder.engine_from_path(target);
     /// ```
-    pub fn engine_from_path(&self, input_file_path: &Path) -> Result<Engine, CryptorEngineError> {
+    pub fn engine_from_path(&self, input_file_path: &Path) -> Result<Engine, Error> {
         let mut engine =match input_file_path.is_file() {
             true => {
                 Engine::try_from_file(input_file_path)?
@@ -102,7 +102,7 @@ impl Engine {
     ///
     /// # Examples
     /// refer to the documentation of EngineGenerator::engine_from_path
-    fn try_from_file(input_file_path: &Path) -> Result<Self, CryptorEngineError> {
+    fn try_from_file(input_file_path: &Path) -> Result<Self, Error> {
         let tmp_file = create_temp_file(
             safe_get_parent(&input_file_path).as_path()
         )?;
@@ -120,7 +120,8 @@ impl Engine {
                 input_file: File::options()
                     .read(true)
                     .create(false)
-                    .open(input_file_path)?,
+                    .open(input_file_path)
+                    .map_err(|e| CryptorEngineError::FileIOError(e))?,
                 input_file_path: input_file_path.to_path_buf()
             }
         )
@@ -139,13 +140,14 @@ impl Engine {
     /// 
     /// # Examples
     /// refer to `EngineGenerator::engine_from_path`
-    fn try_with_archive(input_directory_path: &Path) -> Result<Self, CryptorEngineError> {
+    fn try_with_archive(input_directory_path: &Path) -> Result<Self, Error> {
         let input_file = files::archive(input_directory_path)?;
         let tmp_file = create_temp_file(
             safe_get_parent(input_directory_path).as_path()
         )?;
         let input_file_length = input_file.as_file()
-            .metadata()?
+            .metadata()
+            .map_err(|_| CryptorEngineError::FetchFileMetadataFailed)?
             .len();
 
         Ok (
@@ -175,7 +177,7 @@ impl Engine {
     /// 
     /// refer to projects/file_encryptor/src/main.rs
     /// 
-    pub fn encrypt_archive(&mut self, password: &str) -> Result<(), CryptorEngineError> {
+    pub fn encrypt_archive(&mut self, password: &str) -> Result<(), Error> {
         self.encrypt(password, EncryptedType::Archive)
     }
     
@@ -188,7 +190,7 @@ impl Engine {
     /// 
     ///  # Examples
     /// refer to projects/file_encryptor/src/main.rs
-    pub fn encrypt_file(&mut self, password: &str) -> Result<(), CryptorEngineError> {
+    pub fn encrypt_file(&mut self, password: &str) -> Result<(), Error> {
         self.encrypt(password, EncryptedType::Raw)
     }
     
@@ -207,12 +209,14 @@ impl Engine {
     /// 
     /// # Examples
     /// refer to projects/file_encryptor/src/main.rs
-    fn encrypt(&mut self, password: &str, t: EncryptedType) -> Result<(), CryptorEngineError> {
+    fn encrypt(&mut self, password: &str, t: EncryptedType) -> Result<(), Error> {
         self.header_chunk.set_filetype(t);
 
         // make sure buffers are at the start of the files
-        self.input_file.seek(SeekFrom::Start(0))?;
-        self.temp_file.seek(SeekFrom::Start(0))?;
+        self.input_file.seek(SeekFrom::Start(0))
+            .map_err(|_| CryptorEngine::FileSeekFailed)?;
+        self.temp_file.seek(SeekFrom::Start(0))
+            .map_err(|_| CryptorEngine::FileSeekFailed)?;
 
         encrypt_stream(
             &mut self.input_file,
@@ -238,10 +242,12 @@ impl Engine {
     /// 
     /// # Examples
     /// refer to projects/file_encryptor/main.rs
-    pub fn decrypt(&mut self, password: &str) -> Result<(), CryptorEngineError> {
+    pub fn decrypt(&mut self, password: &str) -> Result<(), Error> {
         // make sure buffers are at the start of the files
-        self.input_file.seek(SeekFrom::Start(0))?;
-        self.temp_file.seek(SeekFrom::Start(0))?;
+        self.input_file.seek(SeekFrom::Start(0))
+            .map_err(|_| CryptorEngine::FileSeekFailed)?;
+        self.temp_file.seek(SeekFrom::Start(0))
+            .map_err(|_| CryptorEngine::FileSeekFailed)?;
 
         let header = decrypt_stream(
             &mut self.input_file,
