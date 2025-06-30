@@ -4,4 +4,4 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-local_utils = {path = "../local_utils"}
+rustware = {path = "../../rustware" }
