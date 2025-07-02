@@ -3,7 +3,7 @@ use std::io::{Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use derive_builder::Builder;
 use tempfile::NamedTempFile;
-use rustware_proc_macro::trace;
+use fn_tracer::trace;
 use crate::{files};
 use crate::files::{create_temp_file, replace_file, safe_get_parent};
 use crate::stream_encryption::{decrypt_stream, encrypt_stream, EncryptedType, HeaderChunk};

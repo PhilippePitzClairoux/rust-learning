@@ -328,6 +328,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "fn-tracer"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "fnv"
 version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -574,25 +583,16 @@ dependencies = [
  "aes-gcm",
  "bincode",
  "derive_builder",
+ "fn-tracer",
  "hkdf",
  "lazy_static",
  "rand",
- "rustware-proc-macro",
  "serde",
  "serde_bytes",
  "sha2",
  "tar",
  "tempfile",
  "thiserror",
-]
-
-[[package]]
-name = "rustware-proc-macro"
-version = "0.1.0"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
 ]
 
 [[package]]

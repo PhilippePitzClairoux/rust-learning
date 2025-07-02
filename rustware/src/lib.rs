@@ -10,4 +10,3 @@ pub mod stream_encryption;
 mod test_common;
 pub mod errors;
 pub mod cryptor_engine;
-mod syscall_stub;

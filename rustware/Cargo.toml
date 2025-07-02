@@ -17,7 +17,7 @@ tempfile = "3.20.0"
 lazy_static = "1.5.0"
 tar = "0.4.44"
 derive_builder = "0.20.2"
-rustware-proc-macro = {path = "../rustware-proc-macro"}
+fn-tracer = {path = "../fn-tracer" }
 
 [features]
 default = ["std"]
