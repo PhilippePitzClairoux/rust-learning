@@ -3,7 +3,6 @@ use rand::{TryRngCore};
 use aes_gcm::aead::{Aead};
 use aes_gcm::{Aes256Gcm, KeyInit, Nonce};
 use hkdf::{Hkdf};
-
 use crate::errors::{Crypto as CryptoError, Error};
 
 /// Takes a password and a salt to derive a key. This is mostly used
@@ -38,6 +37,41 @@ pub fn derive_key(password: &str, salt: &[u8]) -> Result<Vec<u8>, Error> {
     match hk.expand(info.as_slice(), &mut output) {
         Ok(_) => Ok(output),
         Err(_) => Err(CryptoError::KeyDeriveFailed.into())
+    }
+}
+
+/// This function does the reverse of encrypt_chunk. If you take encrypted bytes and
+/// supply the right passphrase, salt and nonce, the output will be the original data
+///
+/// # Errors
+///     * derive_key error (could not derive key from passphrase and salt)
+///     * Decryption failiure (either due to a decryption error or because
+///         the cipher could not be initialized properly
+///
+/// # Examples
+/// ```
+/// use rustware::crypto;
+/// use rustware::crypto::{decrypt_chunk, encrypt_chunk};
+///
+/// let data = "Secret nuclear codes : 12345".as_bytes();
+/// let salt: &[u8] = &[255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255];
+/// let password = "Brute_Force_this_sucka!!";
+/// let nonce: &[u8] = &[1, 1, 1, 1,1, 1,1, 1,1, 1,1, 1];
+///
+/// let encrypted_data = encrypt_chunk(data, password, salt, nonce).unwrap();
+/// let decrypted_data = decrypt_chunk(encrypted_data.as_slice(), password, salt, nonce).unwrap();
+///
+/// println!("Encrypted : {:?}", encrypted_data);
+/// println!("Decrypted : {:?}", decrypted_data);
+/// ```
+pub fn decrypt_chunk(input: &[u8], passphrase: &str, salt: &[u8], nonce: &[u8]) -> Result<Vec<u8>, Error> {
+    let derived_key = derive_key(passphrase, salt)?;
+
+    let cipher= Aes256Gcm::new_from_slice(&derived_key)
+        .map_err(|_| CryptoError::KeyDeriveFailed)?;
+    match cipher.decrypt(&Nonce::from_slice(nonce), input.as_ref()) {
+        Ok(decrypted) => Ok(decrypted),
+        Err(_) => Err(CryptoError::DecryptFailed.into())
     }
 }
 
@@ -83,41 +117,6 @@ pub fn encrypt_chunk(input: &[u8], passphrase: &str, salt: &[u8], nonce: &[u8]) 
             }
         },
         Err(_) => Err(CryptoError::CipherInitializationFailed.into())
-    }
-}
-
-/// This function does the reverse of encrypt_chunk. If you take encrypted bytes and
-/// supply the right passphrase, salt and nonce, the output will be the original data
-///
-/// # Errors
-///     * derive_key error (could not derive key from passphrase and salt)
-///     * Decryption failiure (either due to a decryption error or because
-///         the cipher could not be initialized properly
-///
-/// # Examples
-/// ```
-/// use rustware::crypto;
-/// use rustware::crypto::{decrypt_chunk, encrypt_chunk};
-///
-/// let data = "Secret nuclear codes : 12345".as_bytes();
-/// let salt: &[u8] = &[255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255];
-/// let password = "Brute_Force_this_sucka!!";
-/// let nonce: &[u8] = &[1, 1, 1, 1,1, 1,1, 1,1, 1,1, 1];
-///
-/// let encrypted_data = encrypt_chunk(data, password, salt, nonce).unwrap();
-/// let decrypted_data = decrypt_chunk(encrypted_data.as_slice(), password, salt, nonce).unwrap();
-///
-/// println!("Encrypted : {:?}", encrypted_data);
-/// println!("Decrypted : {:?}", decrypted_data);
-/// ```
-pub fn decrypt_chunk(input: &[u8], passphrase: &str, salt: &[u8], nonce: &[u8]) -> Result<Vec<u8>, Error> {
-    let derived_key = derive_key(passphrase, salt)?;
-
-    let cipher= Aes256Gcm::new_from_slice(&derived_key)
-        .map_err(|_| CryptoError::KeyDeriveFailed)?;
-    match cipher.decrypt(&Nonce::from_slice(nonce), input.as_ref()) {
-        Ok(decrypted) => Ok(decrypted),
-        Err(_) => Err(CryptoError::DecryptFailed.into())
     }
 }
 

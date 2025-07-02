@@ -577,12 +577,22 @@ dependencies = [
  "hkdf",
  "lazy_static",
  "rand",
+ "rustware-proc-macro",
  "serde",
  "serde_bytes",
  "sha2",
  "tar",
  "tempfile",
  "thiserror",
+]
+
+[[package]]
+name = "rustware-proc-macro"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]

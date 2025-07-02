@@ -3,6 +3,7 @@ use std::io::{Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use derive_builder::Builder;
 use tempfile::NamedTempFile;
+use rustware_proc_macro::trace;
 use crate::{files};
 use crate::files::{create_temp_file, replace_file, safe_get_parent};
 use crate::stream_encryption::{decrypt_stream, encrypt_stream, EncryptedType, HeaderChunk};
@@ -176,7 +177,7 @@ impl Engine {
     /// # Example
     /// 
     /// refer to projects/file_encryptor/src/main.rs
-    /// 
+    #[trace]
     pub fn encrypt_archive(&mut self, password: &str) -> Result<(), Error> {
         self.encrypt(password, EncryptedType::Archive)
     }
@@ -190,6 +191,7 @@ impl Engine {
     /// 
     ///  # Examples
     /// refer to projects/file_encryptor/src/main.rs
+    #[trace]
     pub fn encrypt_file(&mut self, password: &str) -> Result<(), Error> {
         self.encrypt(password, EncryptedType::Raw)
     }
@@ -209,6 +211,7 @@ impl Engine {
     /// 
     /// # Examples
     /// refer to projects/file_encryptor/src/main.rs
+    #[trace]
     fn encrypt(&mut self, password: &str, t: EncryptedType) -> Result<(), Error> {
         self.header_chunk.set_filetype(t);
 
@@ -242,6 +245,7 @@ impl Engine {
     /// 
     /// # Examples
     /// refer to projects/file_encryptor/main.rs
+    #[trace]
     pub fn decrypt(&mut self, password: &str) -> Result<(), Error> {
         // make sure buffers are at the start of the files
         self.input_file.seek(SeekFrom::Start(0))
