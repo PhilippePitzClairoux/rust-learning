@@ -11,20 +11,26 @@ fn trace_impl(
     _attr: proc_macro2::TokenStream,
     item: proc_macro2::TokenStream
 ) -> proc_macro2::TokenStream {
-    let input_function: ItemFn = parse2(item).unwrap();
 
-    let vis = input_function.vis;
-    let name = input_function.sig.ident;
-    let arguments = input_function.sig.inputs;
-    let output = input_function.sig.output;
-    let block = input_function.block;
+    if cfg!(feature = "fn_trace") {
+        let input_function: ItemFn = parse2(item).unwrap();
+        let vis = input_function.vis;
+        let name = input_function.sig.ident;
+        let arguments = input_function.sig.inputs;
+        let output = input_function.sig.output;
+        let block = input_function.block;
 
-    quote! {
-        #vis fn #name(#arguments) #output {
-            println!("[TRACE] entering function: {}", stringify!(#name));
-            let result = (|| #block)();
-            println!("[TRACE] exiting function: {}", stringify!(#name));
-            result
-        }
-    }.into()
+        quote! {
+            #vis fn #name(#arguments) #output {
+                println!("[TRACE] entering function: {}", stringify!(#name));
+                let result = (|| #block)();
+                println!("[TRACE] exiting function: {}", stringify!(#name));
+                result
+            }
+        }.into()
+    } else {
+        item
+    }
 }
+
+
