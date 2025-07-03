@@ -1,0 +1,8 @@
+[package]
+name = "syscall_fun_times"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+goblin = "0.10.0"
+capstone = "0.13.0"
