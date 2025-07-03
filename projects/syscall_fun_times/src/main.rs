@@ -2,6 +2,7 @@ use goblin::pe::PE;
 use std::{fs};
 use capstone::arch::x86::ArchMode;
 use capstone::prelude::BuildsCapstone;
+use goblin::pe::options::ParseOptions;
 
 const INTERESTING_FUNCTION_NAMES: &[&str] = &[
     "NtOpenProcess",
@@ -16,14 +17,18 @@ const INTERESTING_FUNCTION_NAMES: &[&str] = &[
 ];
 
 fn main() {
-    let buffer = fs::read("ntdll.dll")
+    let buffer = fs::read("ntdll.x86_64.dll")
         .expect("failed to read dll");
 
-    let pe = PE::parse(&buffer)
-        .expect("failed to parse dll");
+    let pe = PE::parse_with_opts(
+        &buffer,
+        &ParseOptions::default()
+    ).expect("failed to parse dll");
+
+    println!("{:#?}", pe.header);
 
     let mut sorted_exports: Vec<_> = pe.exports.iter().collect();
-    sorted_exports.sort_by_key(|export| export.offset);
+    sorted_exports.sort_by_key(|export| export.rva);
 
     let target_exports = pe.exports.iter()
         .filter(|&x| x.name.is_some() && INTERESTING_FUNCTION_NAMES.contains(&x.name.unwrap()))
@@ -36,7 +41,7 @@ fn main() {
 
     for func in target_exports {
         let (index, _) = sorted_exports.iter().enumerate().find(|(_, x)| {
-            x.name == func.name && x.offset == func.offset // TODO un-ew this
+            x.name == func.name && x.rva == func.rva // TODO un-ew this
         }).expect(format!("could not find {:?} in sorted_exports", func).as_str());
         let next_export = sorted_exports[index+2]; // +2 if using wine .dlls - TODO make sure index exists before accessing
 
@@ -45,7 +50,7 @@ fn main() {
 
         let raw_instructions = cs.disasm_all(
             buffer[start..end].iter().as_slice(),
-            func.rva as u64
+            0
         ).expect("failed to disassemble");
 
 
