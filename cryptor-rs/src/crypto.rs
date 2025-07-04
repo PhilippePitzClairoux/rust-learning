@@ -21,7 +21,7 @@ use crate::errors::{Crypto as CryptoError, Error};
 ///
 /// # Examples
 /// ```no_run
-///  use rustware::crypto::derive_key;
+///  use cryptor_rs::crypto::derive_key;
 ///
 ///  let password = "Sup3rS3cr37P4ssw0rd";
 ///  let salt: &[u8] = &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
@@ -50,8 +50,8 @@ pub fn derive_key(password: &str, salt: &[u8]) -> Result<Vec<u8>, Error> {
 ///
 /// # Examples
 /// ```
-/// use rustware::crypto;
-/// use rustware::crypto::{decrypt_chunk, encrypt_chunk};
+/// use cryptor_rs::crypto;
+/// use cryptor_rs::crypto::{decrypt_chunk, encrypt_chunk};
 ///
 /// let data = "Secret nuclear codes : 12345".as_bytes();
 /// let salt: &[u8] = &[255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255];
@@ -97,8 +97,8 @@ pub fn decrypt_chunk(input: &[u8], passphrase: &str, salt: &[u8], nonce: &[u8]) 
 /// # Examples
 ///
 /// ```no_run
-/// use rustware::crypto;
-/// use rustware::crypto::encrypt_chunk;
+/// use cryptor_rs::crypto;
+/// use cryptor_rs::crypto::encrypt_chunk;
 ///
 /// let data = "Secret nuclear codes : 12345".as_bytes();
 /// let salt: &[u8] = &[255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255];
@@ -138,7 +138,7 @@ pub fn byte_vector_to_string(bytes_vector: &Vec<u8>) -> String {
 ///
 /// # Examples
 /// ```no_run
-///     use rustware::crypto::generate_random_vector;
+///     use cryptor_rs::crypto::generate_random_vector;
 ///
 /// let my_vec = generate_random_vector(12);
 /// println!("Random vector : {:?}", my_vec);

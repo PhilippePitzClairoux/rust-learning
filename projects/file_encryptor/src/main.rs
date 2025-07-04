@@ -1,12 +1,12 @@
 use std::cmp::PartialEq;
 use std::fs;
 use std::fs::Metadata;
-use rustware::{cryptor_engine, stream_encryption};
+use cryptor-rs::{cryptor_engine, stream_encryption};
 use clap::{arg, Parser, ValueEnum};
 use std::path::Path;
 use std::process::exit;
-use rustware::cryptor_engine::{Engine, EngineGenerator};
-use rustware::stream_encryption::EncryptedType;
+use cryptor-rs::cryptor_engine::{Engine, EngineGenerator};
+use cryptor-rs::stream_encryption::EncryptedType;
 
 #[derive(Debug, Clone, PartialEq,ValueEnum)]
 enum Action {
@@ -16,7 +16,7 @@ enum Action {
 
 #[derive(Parser, Debug)]
 #[command(
-    name = "cryptor",
+    name = "cryptor-rs",
     version = "1.0",
     author = "an0nym00s3",
     about = "Encrypt/Decrypt files to protect your data!"
@@ -56,7 +56,7 @@ fn main() {
     let input_info = fs::metadata(input_path).expect("could not read metadata");
     
     let engine_builder = cryptor_engine::EngineGeneratorBuilder::default()
-        .build().expect("could not generate cryptor engine generator");
+        .build().expect("could not generate cryptor-rs engine generator");
 
     if args.walk_directories {
         process_directory_files(&args, &input_path, engine_builder, args.action == Action::Encrypt);
@@ -75,7 +75,7 @@ fn handle_as_file(args: &Args, input_is_encrypted: bool, input_path: &Path, inpu
         false => EncryptedType::Archive
     };
     let mut engine = engine_builder.engine_from_path(input_path)
-        .expect("could not generate cryptor engine");
+        .expect("could not generate cryptor-rs engine");
 
     match &args.action {
         Action::Encrypt => {

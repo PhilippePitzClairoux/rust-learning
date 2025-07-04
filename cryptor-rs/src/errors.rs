@@ -108,7 +108,7 @@ pub enum CryptorEngine {
     #[error("this is not suppose to happen...")]
     NoTempFileCreated,
 
-    #[error("unexpected cryptor failure")]
+    #[error("unexpected cryptor-rs failure")]
     UnexpectedCryptorFailure(#[from] Cryptor),
 
     #[error("unexpected file failure")]

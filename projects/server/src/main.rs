@@ -1,7 +1,7 @@
 use std::{thread};
 use std::net::{TcpListener, TcpStream};
 use std::time::{Duration};
-use rustware::tcp;
+use cryptor-rs::tcp;
 
 fn serve_connection(stream: &mut TcpStream) {
     println!("inside server_connection!");

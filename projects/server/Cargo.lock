@@ -460,7 +460,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "rustware"
+name = "cryptor-rs"
 version = "0.1.0"
 dependencies = [
  "aes-gcm",
@@ -511,7 +511,7 @@ dependencies = [
 name = "server"
 version = "0.1.0"
 dependencies = [
- "rustware",
+ "cryptor-rs",
 ]
 
 [[package]]

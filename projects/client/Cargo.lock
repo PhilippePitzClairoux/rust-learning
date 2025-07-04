@@ -92,7 +92,7 @@ dependencies = [
 name = "client"
 version = "0.1.0"
 dependencies = [
- "rustware",
+ "cryptor-rs",
 ]
 
 [[package]]
@@ -467,7 +467,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "rustware"
+name = "cryptor-rs"
 version = "0.1.0"
 dependencies = [
  "aes-gcm",

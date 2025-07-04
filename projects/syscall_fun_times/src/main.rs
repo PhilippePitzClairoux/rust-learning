@@ -1,7 +1,6 @@
 use goblin::pe::PE;
 use std::{fs};
-use capstone::arch::x86::ArchMode;
-use capstone::prelude::BuildsCapstone;
+use capstone::prelude::*;
 use goblin::pe::options::ParseOptions;
 
 const INTERESTING_FUNCTION_NAMES: &[&str] = &[
@@ -25,8 +24,6 @@ fn main() {
         &ParseOptions::default()
     ).expect("failed to parse dll");
 
-    println!("{:#?}", pe.header);
-
     let mut sorted_exports: Vec<_> = pe.exports.iter().collect();
     sorted_exports.sort_by_key(|export| export.rva);
 
@@ -36,7 +33,7 @@ fn main() {
 
     let cs = capstone::Capstone::new()
         .x86()
-        .mode(ArchMode::Mode64)
+        .mode(arch::x86::ArchMode::Mode64)
         .build().expect("failed to compile capstone");
 
     for func in target_exports {
@@ -46,13 +43,12 @@ fn main() {
         let next_export = sorted_exports[index+2]; // +2 if using wine .dlls - TODO make sure index exists before accessing
 
         let start = func.rva;      // TODO : do this safely!!
-        let end = next_export.rva; // TODO : do this safely!!
+        let end = start + next_export.rva - func.rva; // TODO : do this safely!!
 
         let raw_instructions = cs.disasm_all(
             buffer[start..end].iter().as_slice(),
             0
         ).expect("failed to disassemble");
-
 
         println!("assembly code for function {:?}", func);
         for insn in raw_instructions.iter() {

@@ -109,6 +109,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "cryptor-rs"
+version = "0.1.0"
+dependencies = [
+ "aes-gcm",
+ "bincode",
+ "cryptor-rs",
+ "derive_builder",
+ "fn-tracer",
+ "hkdf",
+ "lazy_static",
+ "rand",
+ "serde",
+ "serde_bytes",
+ "sha2",
+ "tar",
+ "tempfile",
+ "thiserror",
+]
+
+[[package]]
 name = "ctr"
 version = "0.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -457,26 +477,6 @@ dependencies = [
  "libc",
  "linux-raw-sys",
  "windows-sys",
-]
-
-[[package]]
-name = "rustware"
-version = "0.1.0"
-dependencies = [
- "aes-gcm",
- "bincode",
- "derive_builder",
- "fn-tracer",
- "hkdf",
- "lazy_static",
- "rand",
- "rustware",
- "serde",
- "serde_bytes",
- "sha2",
- "tar",
- "tempfile",
- "thiserror",
 ]
 
 [[package]]

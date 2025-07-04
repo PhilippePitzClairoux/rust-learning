@@ -24,7 +24,7 @@ pub const FILE_CHUNK_SIZE: u64 = 1024 * 1024 * 2;
 /// # Example
 /// ```no_run
 /// use std::path::Path;
-/// use rustware::files::open_file;
+/// use cryptor_rs::files::open_file;
 ///
 /// let shadow_reader = open_file(Path::new("/etc/shadow")).unwrap();
 /// println!("{:?}", shadow_reader)
@@ -47,7 +47,7 @@ pub fn open_file<P: AsRef<Path>>(path: P) -> Result<File, Error> {
 /// ```no_run
 /// use std::io::Write;
 /// use std::path::Path;
-/// use rustware::files::create_file;
+/// use cryptor_rs::files::create_file;
 ///
 /// let mut f = create_file(Path::new("/tmp/wow.txt")).unwrap();
 /// f.write_all(b"Damn right!").unwrap();
@@ -68,7 +68,7 @@ pub fn create_file<P: AsRef<Path>>(path: P) -> Result<File, Error> {
 ///
 /// ```no_run
 /// use std::path::Path;
-/// use rustware::files::{open_file, read_chunk};
+/// use cryptor_rs::files::{open_file, read_chunk};
 ///
 /// let mut shadow_reader = open_file(Path::new("/etc/shadow")).unwrap();
 /// let chunk = read_chunk(&mut shadow_reader, 4096); // read 4096 bytes from shadow_reader
@@ -93,7 +93,7 @@ where
 /// # Examples
 /// ```no_run
 /// use std::path::Path;
-/// use rustware::files::replace_file;
+/// use cryptor_rs::files::replace_file;
 ///  
 /// replace_file(Path::new("/tmp/a.xt"), Path::new("/tmp/b.txt")).unwrap();
 /// ```
@@ -112,7 +112,7 @@ pub fn replace_file<P: AsRef<Path>, Q: AsRef<Path>>(input: P, output: Q) -> Resu
 /// ```no_run
 /// use std::io::Write;
 /// use std::path::Path;
-/// use rustware::files::{create_file, write_chunk};
+/// use cryptor_rs::files::{create_file, write_chunk};
 ///
 /// let mut f = create_file(Path::new("/tmp/wow.txt")).unwrap();
 /// write_chunk(&mut f, "oh no... why all this wrapping!!!".as_bytes()).unwrap();

@@ -311,7 +311,7 @@ name = "file_encryptor"
 version = "0.1.0"
 dependencies = [
  "clap",
- "rustware",
+ "cryptor-rs",
  "tempfile",
 ]
 
@@ -577,7 +577,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "rustware"
+name = "cryptor-rs"
 version = "0.1.0"
 dependencies = [
  "aes-gcm",

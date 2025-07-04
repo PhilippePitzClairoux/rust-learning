@@ -17,7 +17,7 @@ use crate::errors::{CryptorEngine as CryptorEngineError, CryptorEngine, Error};
 /// If you don't supply a HeaderChunk, a new one will automatically be created when encrypting a file.
 ///
 #[derive(Builder)]
-pub struct EngineGenerator {
+pub struct Builder {
     #[builder(default)]
     config: Option<bincode::config::Configuration>,
 
@@ -25,9 +25,9 @@ pub struct EngineGenerator {
     header_chunk: Option<HeaderChunk>,
 }
 
-impl EngineGenerator {
+impl Builder {
 
-    /// This method let's us generate a cryptor engine using the settings we supplied in the EngineGenerator
+    /// This method let's us generate a cryptor-rs engine using the settings we supplied in the EngineGenerator
     /// as well as the supplied path (path to a file or a directory).
     ///
     /// This method will generate the new engine with the necessary parameters. Whether they are loaded
@@ -41,15 +41,15 @@ impl EngineGenerator {
     /// # Example
     ///
     /// ```no_run
-    /// use rustware::cryptor_engine;
+    /// use cryptor_rs::cryptor_engine;
     /// use std::path::Path;
     ///
     ///  let target = Path::new("."); // target current directory
     ///  let engine_builder = cryptor_engine::EngineGeneratorBuilder::default()
-    ///         .build().expect("could not generate cryptor engine generator");
+    ///         .build().expect("could not generate cryptor-rs engine generator");
     ///  let engine = engine_builder.engine_from_path(target);
     /// ```
-    pub fn engine_from_path(&self, input_file_path: &Path) -> Result<Engine, Error> {
+    pub fn from_path(&self, input_file_path: &Path) -> Result<Engine, Error> {
         let mut engine =match input_file_path.is_file() {
             true => {
                 Engine::try_from_file(input_file_path)?

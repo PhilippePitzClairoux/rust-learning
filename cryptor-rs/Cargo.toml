@@ -1,5 +1,5 @@
 [package]
-name = "rustware"
+name = "cryptor-rs"
 version = "0.1.0"
 edition = "2024"
 
@@ -25,4 +25,4 @@ std = []
 test_utils = []
 
 [dev-dependencies]
-rustware = { path = ".", features = ["test_utils"] }
+cryptor-rs = { path = ".", features = ["test_utils"] }

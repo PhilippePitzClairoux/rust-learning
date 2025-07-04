@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 use std::net::{Shutdown, TcpStream};
-use rustware::tcp;
+use cryptor-rs::tcp;
 use std::thread;
 use std::thread::{JoinHandle};
 
